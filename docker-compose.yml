@@ -1,0 +1,87 @@
+# a docker-compose file with a postgres 14 service
+# python manage.py connect_to_index
+
+version: '3.8'
+services:
+  cinderbackend:
+    build:
+        context: .
+        dockerfile: ./dockerfiles/Dockerfile
+    container_name: cinderbackend
+    ports:
+      - "8000:8000"
+    environment:
+        - POSTGRES_NAME=postgres
+        - POSTGRES_DB=postgres
+        - POSTGRES_USER=postgres
+        - POSTGRES_PASSWORD=postgres
+        - POSTGRES_HOST=dbcinderbackend
+        - REDIS_HOST=rediscinderbackend
+        - CORS_ORIGIN_WHITELIST=http://localhost,http://localhost:4200,http://172.31.0.5
+        - ALLOWED_HOSTS=localhost,172.31.0.5,localhost:8000
+    networks:
+      - cinderbackend-net
+    volumes:
+      - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
+  cinderbackend-worker:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile
+    container_name: cinderbackend-worker
+    command: python manage.py rqworker default
+    environment:
+      - POSTGRES_NAME=postgres
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=dbcinderbackend
+      - REDIS_HOST=rediscinderbackend
+    networks:
+      - cinderbackend-net
+    volumes:
+      - ./media:/app/media
+  nginx-cinderbackend:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile-nginx
+    container_name: nginx-cinderbackend
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./media:/media/
+      - ./staticfiles:/static/
+    depends_on:
+      - cinderbackend
+    networks:
+      - cinderbackend-net
+  dbcinderbackend:
+    container_name: dbcinderbackend
+    image: postgres:14
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    ports:
+    - "5432:5432"
+    volumes:
+    - ./data:/var/lib/postgresql/data
+    networks:
+      - cinderbackend-net
+  rediscinderbackend:
+    container_name: rediscinderbackend
+    build:
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile-redis
+    restart: always
+    environment:
+      - REDIS_PASSWORD=redis
+    ports:
+      - "6379:6379"
+    networks:
+      - cinderbackend-net
+
+networks:
+    cinderbackend-net:
