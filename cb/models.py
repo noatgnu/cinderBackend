@@ -93,6 +93,7 @@ class ProjectFile(models.Model):
     load_file_content = models.BooleanField(default=False)
     metadata = models.TextField(blank=True, null=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='files', blank=True, null=True)
+    extra_data = models.TextField(blank=True, null=True)
 
     class Meta:
         ordering = ['created_at']

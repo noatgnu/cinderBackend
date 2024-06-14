@@ -174,10 +174,17 @@ class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
 
     def update(self, request, *args, **kwargs):
         project_file = self.get_object()
-        project_file.name = request.data['name']
-        project_file.description = request.data['description']
-        project_file.file_type = request.data['file_type']
-        project_file.file_category = request.data['file_category']
+        if 'name' in request.data:
+            project_file.name = request.data['name']
+        if 'description' in request.data:
+            project_file.description = request.data['description']
+        if 'file_type' in request.data:
+            project_file.file_type = request.data['file_type']
+        if 'file_category' in request.data:
+            project_file.file_category = request.data['file_category']
+        if 'extra_data' in request.data:
+            project_file.extra_data = json.dumps(request.data['extra_data'])
+
         project_file.save()
         return Response(ProjectFileSerializer(project_file).data, status=status.HTTP_200_OK)
 

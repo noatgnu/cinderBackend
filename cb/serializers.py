@@ -13,7 +13,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 class ProjectFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectFile
-        fields = ['id', 'name', 'description', 'hash', 'file_type', 'file', 'file_category', 'project', 'load_file_content', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'hash', 'file_type', 'file', 'file_category', 'project', 'load_file_content', 'created_at', 'updated_at', 'extra_data']
 
 
 class AnalysisGroupSerializer(serializers.ModelSerializer):
