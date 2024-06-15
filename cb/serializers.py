@@ -1,3 +1,5 @@
+import json
+
 from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
@@ -37,6 +39,7 @@ class ComparisonMatrixSerializer(serializers.ModelSerializer):
 class SearchResultSerializer(serializers.ModelSerializer):
     file = serializers.SerializerMethodField()
     analysis_group = serializers.SerializerMethodField()
+    searched_data = serializers.SerializerMethodField()
 
     def get_file(self, search_result):
         return {'id': search_result.file.id, 'name': search_result.file.name, 'file_type': search_result.file.file_type, 'file_category': search_result.file.file_category}
@@ -44,9 +47,15 @@ class SearchResultSerializer(serializers.ModelSerializer):
     def get_analysis_group(self, search_result):
         return {'id': search_result.analysis_group.id, 'name': search_result.analysis_group.name, 'ptm': search_result.analysis_group.ptm}
 
+    def get_searched_data(self, search_result):
+        if search_result.searched_data is None:
+            return None
+        return json.loads(search_result.searched_data)
+
     class Meta:
         model = SearchResult
-        fields = ['id', 'search_term', 'search_results', 'search_count', 'created_at', 'updated_at', 'session', 'analysis_group', 'file']
+        fields = ['id', 'search_term', 'created_at', 'updated_at', 'session', 'analysis_group', 'file', 'primary_id', 'gene_name', 'uniprot_id',
+                  'log2_fc', 'log10_p', 'searched_data', 'comparison_label', 'condition_A', 'condition_B']
 
 
 class SearchSessionSerializer(serializers.ModelSerializer):

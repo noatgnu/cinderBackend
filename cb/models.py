@@ -270,6 +270,15 @@ class SearchSession(models.Model):
     completed = models.BooleanField(default=False)
     pending = models.BooleanField(default=True)
     in_progress = models.BooleanField(default=False)
+    log2_fc = models.FloatField(default=0.6)
+    log10_p_value = models.FloatField(default=1.31)
+    search_mode_choices = [
+        ('full', "Full text"),
+        ('gene', "Gene names"),
+        ('uniprot', "UniProt Accession IDs"),
+        ('pi', "Primary IDs")
+    ]
+    search_mode = models.CharField(max_length=255, choices=search_mode_choices, default='full')
 
     class Meta:
         ordering = ['created_at']
@@ -283,6 +292,7 @@ class SearchSession(models.Model):
         files = files.filter(file_contents__search_vector=self.search_term).annotate(headline=SearchHeadline('file_contents__content', self.search_term, start_sel="<b>", stop_sel="</b>", highlight_all=True)).distinct()
         term_headline_file_dict = {}
         found_terms = []
+        results = []
         for f in files:
             if f.id not in term_headline_file_dict:
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
@@ -301,48 +311,144 @@ class SearchSession(models.Model):
             if term_contexts:
                 file = term_headline_file_dict[f]['file']
                 search_result_dict = {}
-                for term in term_contexts:
-
-                    if term not in search_result_dict:
-
-                        search_result = SearchResult.objects.create(search_term=term,
-                                                                headline_results=json.dumps(list(set(term_contexts[term]))),
-                                                                file=file,
-                                                                session=self,
-                                                                analysis_group=file.analysis_group
-                                                                )
-                        search_result_dict[term] = search_result
+                # for term in term_contexts:
+                #
+                #     if term not in search_result_dict:
+                #
+                #         search_result = SearchResult.objects.create(search_term=term,
+                #                                                 #headline_results=json.dumps(list(set(term_contexts[term]))),
+                #                                                 file=file,
+                #                                                 session=self,
+                #                                                 analysis_group=file.analysis_group
+                #                                                 )
+                #         search_result_dict[term] = search_result
 
                 line_term_already_found = {term: [] for term in term_contexts}
+                first_line_of_file = ""
+                column_headers_map = {}
                 with file.file.open('rt') as infile:
-                    if os.name == "nt":
-                        for rid, line in enumerate(infile, 1):
-                            line = line.strip()
-                            if line:
-                                for t in term_contexts:
-                                    match = re.search(r"(?<!\S)(?<!-|\w)(;)*{0}(?!\w)(?!\S)".format(t), line)
-                                    if match:
-                                        delimiter = file.get_delimiter()
-                                        line_term_already_found[t.lower()].append({"line": rid, "term": t, "context": next(csv.reader([line], delimiter=delimiter, quotechar='"'))})
-                    else:
-                        for t in self.search_file(file.file.path, term_contexts):
-                            # ignore header row
-                            if t["row"] > 1:
-                                row = t["row"]
-                                delimiter = file.get_delimiter()
-                                line_term_already_found[t['term'].lower()].append({"line": row, "term": t['term'], "context": next(csv.reader([t['context']], delimiter=delimiter, quotechar='"'))})
+                    first_line_of_file = infile.readline()
+                    first_line_header = csv.reader([first_line_of_file], delimiter=file.get_delimiter())
+                    column_headers_map = {h: i for i, h in enumerate(next(first_line_header))}
+                for result in self.get_contexts(file, term_contexts):
+                    found_term = result["term"].lower()
+                    extra_data = json.loads(file.extra_data)
+                    for search_result in self.extract_result_data(column_headers_map, file, found_term, result):
+                        gene_name = ""
+                        primary_id = ""
+                        uniprot_id = ""
+                        if "gene_name_col" in extra_data:
+                            gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
+                            gene_name = result["context"][gene_name_col_index]
+                        if "primary_id_col" in extra_data:
+                            primary_id_col_index = column_headers_map[extra_data["primary_id_col"]]
+                            primary_id = result["context"][primary_id_col_index]
+                        if "uniprot_id_col" in extra_data:
+                            uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
+                            uniprot_id = result["context"][uniprot_col_index]
+                        search_result.gene_name = gene_name
+                        search_result.primary_id = primary_id
+                        search_result.uniprot_id = uniprot_id
 
-                for k in line_term_already_found:
-                    search_result = search_result_dict[k]
-                    result_array = []
-                    for i in line_term_already_found[k]:
-                        result_array.append(i)
-                    search_result.search_results = json.dumps(result_array)
-                    search_result.search_count = len(result_array)
-                    search_result.save()
+                        if self.search_mode == "gene":
+                            if "gene_name_col" in extra_data:
+                                if found_term in gene_name.lower():
+                                    results.append(search_result)
+
+                        elif self.search_mode == "uniprot":
+                            if "uniprot_col" in extra_data:
+                                if found_term in uniprot_id.lower():
+                                    results.append(search_result)
+                        elif self.search_mode == "pi":
+                            if "primary_id_col" in extra_data:
+                                if found_term in primary_id.lower():
+                                    results.append(search_result)
+                        else:
+                            results.append(search_result)
+
+        if len(results) > 0:
+            SearchResult.objects.bulk_create(results)
         self.in_progress = False
         self.completed = True
         self.save()
+
+    def extract_result_data(self, column_headers_map, file, found_term, result):
+        print(file.file_category)
+        if file.file_category == "df":
+            comparison_matrix = ComparisonMatrix.objects.filter(file=file).first()
+            matrix = json.loads(comparison_matrix.matrix)
+            print(matrix)
+            for m in matrix:
+                print(result["context"])
+                log2_fc = float(result["context"][column_headers_map[m["fold_change_col"]]])
+                print(log2_fc)
+                log10_p = float(result["context"][column_headers_map[m["p_value_col"]]])
+                if self.apply_fc_pvalue_filter(log2_fc, log10_p):
+                    sr = SearchResult(
+                        search_term=found_term,
+                        file=file,
+                        session=self,
+                        analysis_group=file.analysis_group,
+                        condition_A=m["condition_A"],
+                        condition_B=m["condition_B"],
+                        log2_fc=log2_fc,
+                        log10_p=log10_p,
+                    )
+                    if "comparison_col" in m:
+                        if m["comparison_col"] in column_headers_map:
+                            sr.comparison_label = result["context"][column_headers_map[m["comparison_col"]]]
+                            if m["comparison_label"]:
+                                sr.comparison_label += f"({m['comparison_label']})"
+                        else:
+                            sr.comparison_label = m["comparison_label"]
+                    else:
+                        sr.comparison_label = m["comparison_label"]
+                    yield sr
+        else:
+            sr = SearchResult(
+                search_term=found_term,
+                file=file,
+                session=self,
+                analysis_group=file.analysis_group,
+            )
+            sample_annotation = SampleAnnotation.objects.filter(file=file).first()
+            if sample_annotation:
+                annotation = json.loads(sample_annotation.annotations)
+                searched_data = []
+                print(annotation)
+                for a in annotation:
+                    print(result["context"])
+
+                    if a["Sample"] in column_headers_map:
+                        sample_col_index = column_headers_map[a["Sample"]]
+                        searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
+                                              "Value": float(result["context"][sample_col_index])})
+                if searched_data and len(searched_data) > 0:
+                    sr.searched_data = json.dumps(searched_data)
+                    yield sr
+
+    def get_contexts(self, file: ProjectFile, term_contexts: Dict[str, List[str]]):
+        with file.file.open('rt') as infile:
+            if os.name == "nt":
+                for rid, line in enumerate(infile, 1):
+                    line = line.strip()
+                    if line:
+                        for t in term_contexts:
+                            match = re.search(r"(?<!\S)(?<!-|\w)(;)*{0}(?!\w)(?!\S)".format(t), line)
+                            if match:
+                                delimiter = file.get_delimiter()
+                                yield {"row": rid, "term": t, "context": next(csv.reader([line], delimiter=delimiter, quotechar='"'))}
+            else:
+                for t in self.search_file(file.file.path, term_contexts):
+                    # ignore header row
+                    if t["row"] > 1:
+                        row = t["row"]
+                        delimiter = file.get_delimiter()
+                        yield {"row": row, "term": t['term'], "context": next(csv.reader([t['context']], delimiter=delimiter, quotechar='"'))}
+
+    def apply_fc_pvalue_filter(self, log2_fc: float, log10_p: float):
+        return self.log2_fc <= abs(log2_fc) and log10_p >= self.log10_p_value
+
 
     def search_file(self, filepath: str, terms: Dict[str, List[str]]):
         """
@@ -371,12 +477,21 @@ class SearchResult(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     search_term = models.CharField(max_length=255)
-    headline_results = models.TextField(blank=True, null=True)
-    search_results = models.TextField(blank=True, null=True)
-    search_count = models.IntegerField(default=0)
+    #headline_results = models.TextField(blank=True, null=True)
+    #search_results = models.TextField(blank=True, null=True)
+    #search_count = models.IntegerField(default=0)
     file = models.ForeignKey(ProjectFile, on_delete=models.CASCADE, related_name='search_results', blank=True, null=True)
     session = models.ForeignKey(SearchSession, on_delete=models.CASCADE, related_name='search_results', blank=True, null=True)
     analysis_group = models.ForeignKey(AnalysisGroup, on_delete=models.CASCADE, related_name='search_results', blank=True, null=True)
+    condition_A = models.CharField(max_length=255, blank=True, null=True)
+    condition_B = models.CharField(max_length=255, blank=True, null=True)
+    comparison_label = models.CharField(max_length=255, blank=True, null=True)
+    log2_fc = models.FloatField(blank=True, null=True)
+    log10_p = models.FloatField(blank=True, null=True)
+    searched_data = models.TextField(blank=True, null=True)
+    primary_id = models.CharField(max_length=255, blank=True, null=True)
+    gene_name = models.CharField(max_length=255, blank=True, null=True)
+    uniprot_id = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         ordering = ['created_at']

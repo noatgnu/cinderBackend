@@ -400,6 +400,9 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
 
     def create(self, request, *args, **kwargs):
         search_term = request.data['search_term']
+        fc_cutoff = request.data['fc_cutoff']
+        p_value_cutoff = request.data['p_value_cutoff']
+        search_mode = request.data['search_mode']
         analysis_groups = request.data['analysis_groups']
         user = self.request.user
         if 'session_id' in request.data:
@@ -407,6 +410,9 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
             search_session = SearchSession.objects.create(search_term=search_term, session_id=session_id)
         else:
             search_session = SearchSession.objects.create(search_term=search_term)
+        search_session.log2_fc = float(fc_cutoff)
+        search_session.log10_p_value = float(p_value_cutoff)
+        search_session.search_mode = search_mode
         # check if user is not anonymous
         if user.is_authenticated:
             search_session.user = user
