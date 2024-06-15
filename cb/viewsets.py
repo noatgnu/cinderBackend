@@ -325,8 +325,8 @@ class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
-    filter_backends  = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    ordering_fields = ['id', 'created_at']
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'created_at', 'log2_fc', 'log10_p', 'search_term']
 
     def get_queryset(self):
         query = Q()
