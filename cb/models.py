@@ -6,6 +6,8 @@ import re
 import subprocess
 from typing import List, Dict, Optional
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVectorField, SearchHeadline, SearchVector
 from django.db import models
@@ -279,6 +281,7 @@ class SearchSession(models.Model):
         ('pi', "Primary IDs")
     ]
     search_mode = models.CharField(max_length=255, choices=search_mode_choices, default='full')
+    failed = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['created_at']
@@ -293,6 +296,7 @@ class SearchSession(models.Model):
         term_headline_file_dict = {}
         found_terms = []
         results = []
+
         for f in files:
             if f.id not in term_headline_file_dict:
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
@@ -304,8 +308,30 @@ class SearchSession(models.Model):
                 term_headline_file_dict[f.id]['term_contexts'][term].extend(term_contexts[t])
                 if term not in found_terms:
                     found_terms.append(term)
+        channel_layer = get_channel_layer()
+        count_found_files = len([f for f in term_headline_file_dict])
+        current_progress = 0
+        async_to_sync(channel_layer.group_send)(
+            f"search_{self.session_id}", {
+                "type": "search_message", "message": {
+                    "type": "search_status",
+                    "status": "in_progress",
+                    "id": self.id,
+                    "found_files": count_found_files,
+                    "current_progress": current_progress,
+                }})
+
 
         for f in term_headline_file_dict:
+            async_to_sync(channel_layer.group_send)(
+                f"search_{self.session_id}", {
+                    "type": "search_message", "message": {
+                        "type": "search_status",
+                        "status": "in_progress",
+                        "id": self.id,
+                        "found_files": count_found_files,
+                        "current_progress": current_progress+1,
+                    }})
             term_contexts = term_headline_file_dict[f]['term_contexts']
 
             if term_contexts:
@@ -365,6 +391,7 @@ class SearchSession(models.Model):
                                     results.append(search_result)
                         else:
                             results.append(search_result)
+            current_progress += 1
 
         if len(results) > 0:
             SearchResult.objects.bulk_create(results)
@@ -424,7 +451,7 @@ class SearchSession(models.Model):
                         searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
                                               "Value": float(result["context"][sample_col_index])})
                 if searched_data and len(searched_data) > 0:
-                    sr.searched_data = json.dumps(searched_data)
+                    sr.searched_data = json.dumps(searched_data).replace("NaN", "null")
                     yield sr
 
     def get_contexts(self, file: ProjectFile, term_contexts: Dict[str, List[str]]):

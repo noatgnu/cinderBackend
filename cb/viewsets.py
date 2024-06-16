@@ -347,6 +347,9 @@ class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
         file_category = self.request.query_params.get('file_category', None)
         if file_category:
             query &= Q(file__file_category=file_category)
+        primary_id = self.request.query_params.get('primary_id', None)
+        if primary_id:
+            query &= Q(primary_id=primary_id)
         return self.queryset.filter(query)
 
     def get_object(self):
@@ -378,7 +381,7 @@ class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
     @action(detail=True, methods=['get'])
     def get_related(self, request, pk=None):
         search_result = self.get_object()
-        result_from_same_session_and_analysis_group = SearchResult.objects.filter(session=search_result.session, analysis_group=search_result.analysis_group).exclude(id=search_result.id)
+        result_from_same_session_and_analysis_group = SearchResult.objects.filter(session=search_result.session, analysis_group=search_result.analysis_group, primary_id=search_result.primary_id).exclude(id=search_result.id)
         data = SearchResultSerializer(result_from_same_session_and_analysis_group, many=True).data
         return Response(data, status=status.HTTP_200_OK)
 
@@ -447,6 +450,10 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
 
     def destroy(self, request, *args, **kwargs):
         search_session = self.get_object()
+        if not self.request.user.is_authenticated:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if search_session.user != self.request.user:
+            return Response(status=status.HTTP_403_FORBIDDEN)
         search_session.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
