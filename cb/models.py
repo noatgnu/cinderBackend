@@ -291,7 +291,11 @@ class SearchSession(models.Model):
         self.pending = False
         self.in_progress = True
         self.save()
-        files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all())
+        analysis_groups = self.analysis_groups.all()
+        if analysis_groups.exists():
+            files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df", "searched"])
+        else:
+            files = ProjectFile.objects.filter(file_category__in=["df", "searched"])
         files = files.filter(file_contents__search_vector=self.search_term).annotate(headline=SearchHeadline('file_contents__content', self.search_term, start_sel="<b>", stop_sel="</b>", highlight_all=True)).distinct()
         term_headline_file_dict = {}
         found_terms = []
