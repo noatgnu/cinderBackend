@@ -63,6 +63,11 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
         project.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
+    def get_count(self, request):
+        count = Project.objects.count()
+        return Response({"count": count}, status=status.HTTP_200_OK)
+
     # @action(detail=False, methods=['post'])
     # def search(self, request):
     #     query = SearchQuery(request.data['query'], search_type="websearch")
@@ -108,6 +113,7 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'name', 'created_at']
     filterset_fields = ['name']
     pagination_class = LimitOffsetPagination
     search_fields = ['name']
@@ -146,6 +152,11 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         files = ProjectFile.objects.filter(analysis_group=analysis_group)
         data = ProjectFileSerializer(files, many=True).data
         return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
+    def get_count(self, request):
+        count = AnalysisGroup.objects.count()
+        return Response({"count": count}, status=status.HTTP_200_OK)
 
 
 
