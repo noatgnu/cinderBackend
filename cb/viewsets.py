@@ -457,6 +457,13 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
         search_session.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=False, methods=['post'])
+    def get_analysis_groups_from_projects(self, request):
+        project_ids = request.data['projects']
+        analysis_groups = AnalysisGroup.objects.filter(project__id__in=project_ids)
+        data = AnalysisGroupSerializer(analysis_groups, many=True).data
+        return Response(data, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['get'])
     def session_id(self, request):
         return Response(str(uuid.uuid4()), status=status.HTTP_200_OK)
