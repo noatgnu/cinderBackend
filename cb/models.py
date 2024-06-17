@@ -58,6 +58,7 @@ class AnalysisGroup(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     ptm = models.BooleanField(default=False)
+    curtain_link = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         ordering = ['created_at']
