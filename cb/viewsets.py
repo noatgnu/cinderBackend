@@ -20,9 +20,10 @@ from rest_framework.response import Response
 from cb.rq_tasks import start_search_session
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
-    SearchSession
+    SearchSession, Species
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
-    ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer
+    ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
+    SpeciesSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -55,6 +56,12 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
         project = self.get_object()
         project.name = request.data['name']
         project.description = request.data['description']
+        if 'species' in request.data:
+            if not request.data['species']:
+                project.species = None
+            else:
+                species = Species.objects.get(id=request.data['species'])
+                project.species = species
         project.save()
         return Response(ProjectSerializer(project).data, status=status.HTTP_200_OK)
 
@@ -467,5 +474,46 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
     @action(detail=False, methods=['get'])
     def session_id(self, request):
         return Response(str(uuid.uuid4()), status=status.HTTP_200_OK)
+
+
+class SpeciesViewSet(viewsets.ModelViewSet, FilterMixin):
+    serializer_class = SpeciesSerializer
+    queryset = Species.objects.all()
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    pagination_class = LimitOffsetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'taxon', 'official_name', 'code', 'common_name', 'synonym']
+    filterset_fields = ['taxon', 'official_name', 'code', 'common_name', 'synonym']
+    search_fields = ['common_name', 'synonym', 'official_name', 'code']
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+    def create(self, request, *args, **kwargs):
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        name = request.data['name']
+        species = Species.objects.create(name=name)
+        data = SpeciesSerializer(species).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        species = self.get_object()
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if 'name' in request.data:
+            species.name = request.data['name']
+        species.save()
+        return Response(SpeciesSerializer(species).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        species = self.get_object()
+        species.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 

@@ -40,6 +40,7 @@ class Project(models.Model):
     encrypted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    species = models.ForeignKey("Species", on_delete=models.CASCADE, related_name="projects", blank=True, null=True)
 
     class Meta:
         ordering = ['created_at']
@@ -532,6 +533,18 @@ class SearchResult(models.Model):
     def __str__(self):
         return self.search_term
 
+
+class Species(models.Model):
+    """ A model to store UniProt species information"""
+    code = models.CharField(max_length=255)
+    taxon = models.IntegerField()
+    official_name = models.CharField(max_length=255)
+    common_name = models.CharField(max_length=255, blank=True, null=True)
+    synonym = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        app_label = 'cb'
+        ordering = ['official_name']
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):

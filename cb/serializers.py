@@ -3,13 +3,13 @@ import json
 from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
-    SearchSession
+    SearchSession, Species
 
 
 class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
-        fields = ['id', 'name', 'description', 'hash', 'metadata', 'global_id', 'temporary', 'user', 'encrypted', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'hash', 'metadata', 'global_id', 'temporary', 'user', 'encrypted', 'created_at', 'updated_at', 'species']
 
 
 class ProjectFileSerializer(serializers.ModelSerializer):
@@ -74,3 +74,8 @@ class SearchSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = SearchSession
         fields = ['id', 'search_term', 'created_at', 'updated_at', 'analysis_groups', 'user', 'session_id']
+
+class SpeciesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Species
+        fields = ['id', 'code', 'taxon', 'common_name', 'official_name', 'synonym']
