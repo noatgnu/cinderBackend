@@ -32,14 +32,14 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
     ordering_fields = ['id', 'name', 'created_at']
     filterset_fields = ['name', 'user']
     search_fields = ['name']
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     pagination_class = LimitOffsetPagination
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        return queryset.filter(user=self.request.user)
+        return queryset
 
     def get_object(self):
         return super().get_object()
@@ -109,7 +109,7 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
 class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = AnalysisGroupSerializer
     queryset = AnalysisGroup.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -163,7 +163,7 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ProjectFileSerializer
     queryset = ProjectFile.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
@@ -258,7 +258,7 @@ class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
 class ComparisonMatrixViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ComparisonMatrixSerializer
     queryset = ComparisonMatrix.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
@@ -295,7 +295,7 @@ class ComparisonMatrixViewSet(viewsets.ModelViewSet, FilterMixin):
 class SampleAnnotationViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = SampleAnnotationSerializer
     queryset = SampleAnnotation.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
