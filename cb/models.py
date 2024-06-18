@@ -295,9 +295,9 @@ class SearchSession(models.Model):
         self.save()
         analysis_groups = self.analysis_groups.all()
         if analysis_groups.exists():
-            files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df", "searched"])
+            files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df"])
         else:
-            files = ProjectFile.objects.filter(file_category__in=["df", "searched"])
+            files = ProjectFile.objects.filter(file_category__in=["df"])
         files = files.filter(file_contents__search_vector=self.search_term).annotate(headline=SearchHeadline('file_contents__content', self.search_term, start_sel="<b>", stop_sel="</b>", highlight_all=True)).distinct()
         term_headline_file_dict = {}
         found_terms = []
@@ -329,6 +329,9 @@ class SearchSession(models.Model):
 
 
         for f in term_headline_file_dict:
+            related_files = term_headline_file_dict[f]['file'].analysis_group.project_files.all().exclude(id=f)
+            result_in_file = []
+            pi_list = []
             async_to_sync(channel_layer.group_send)(
                 f"search_{self.session_id}", {
                     "type": "search_message", "message": {
@@ -364,79 +367,131 @@ class SearchSession(models.Model):
                     column_headers_map = {h: i for i, h in enumerate(next(first_line_header))}
                 for result in self.get_contexts(file, term_contexts):
                     found_term = result["term"].lower()
-                    extra_data = json.loads(file.extra_data)
-                    for search_result in self.extract_result_data(column_headers_map, file, found_term, result):
-                        gene_name = ""
-                        primary_id = ""
-                        uniprot_id = ""
-                        if "gene_name_col" in extra_data:
-                            gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
-                            gene_name = result["context"][gene_name_col_index]
-                        if "primary_id_col" in extra_data:
-                            primary_id_col_index = column_headers_map[extra_data["primary_id_col"]]
-                            primary_id = result["context"][primary_id_col_index]
-                        if "uniprot_id_col" in extra_data:
-                            uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
-                            uniprot_id = result["context"][uniprot_col_index]
-                        search_result.gene_name = gene_name
-                        search_result.primary_id = primary_id
-                        search_result.uniprot_id = uniprot_id
-
-                        if self.search_mode == "gene":
+                    if file.extra_data:
+                        extra_data = json.loads(file.extra_data)
+                        for search_result in self.extract_result_data(column_headers_map, file, found_term, result):
+                            gene_name = ""
+                            primary_id = ""
+                            uniprot_id = ""
                             if "gene_name_col" in extra_data:
-                                if found_term in gene_name.lower():
-                                    results.append(search_result)
-
-                        elif self.search_mode == "uniprot":
-                            if "uniprot_col" in extra_data:
-                                if found_term in uniprot_id.lower():
-                                    results.append(search_result)
-                        elif self.search_mode == "pi":
+                                gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
+                                gene_name = result["context"][gene_name_col_index]
                             if "primary_id_col" in extra_data:
-                                if found_term in primary_id.lower():
-                                    results.append(search_result)
-                        else:
-                            results.append(search_result)
-            current_progress += 1
+                                primary_id_col_index = column_headers_map[extra_data["primary_id_col"]]
+                                primary_id = result["context"][primary_id_col_index]
+                            if "uniprot_id_col" in extra_data:
+                                uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
+                                uniprot_id = result["context"][uniprot_col_index]
+                            search_result.gene_name = gene_name
+                            search_result.primary_id = primary_id
+                            search_result.uniprot_id = uniprot_id
 
-        if len(results) > 0:
-            SearchResult.objects.bulk_create(results)
+                            if self.search_mode == "gene":
+                                if "gene_name_col" in extra_data:
+                                    if found_term in gene_name.lower():
+                                        result_in_file.append(search_result)
+
+                            elif self.search_mode == "uniprot":
+                                if "uniprot_col" in extra_data:
+                                    if found_term in uniprot_id.lower():
+                                        result_in_file.append(search_result)
+                            elif self.search_mode == "pi":
+                                if "primary_id_col" in extra_data:
+                                    if found_term in primary_id.lower():
+                                        result_in_file.append(search_result)
+
+                            else:
+                                result_in_file.append(search_result)
+                            if primary_id not in pi_list:
+                                pi_list.append(primary_id)
+            for related in related_files:
+                print(related)
+
+                with related.file.open('rt') as infile:
+                    first_line_of_file = infile.readline()
+                    first_line_header = csv.reader([first_line_of_file], delimiter=related.get_delimiter())
+                    column_headers_map = {h: i for i, h in enumerate(next(first_line_header))}
+
+                    extra_data = json.loads(related.extra_data)
+                    if "primary_id_col" in extra_data:
+                        primary_id_col_index = column_headers_map[extra_data["primary_id_col"]]
+                        print(pi_list)
+                        for line in infile:
+                            line_data = next(csv.reader([line], delimiter=related.get_delimiter()))
+                            primary_id = line_data[primary_id_col_index]
+
+                            if primary_id in pi_list:
+                                print(primary_id)
+                                if related.file_category == "searched":
+                                    gene_name = ""
+                                    uniprot_id = ""
+                                    if "gene_name_col" in extra_data:
+                                        gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
+                                        gene_name = line_data[gene_name_col_index]
+                                    if "uniprot_id_col" in extra_data:
+                                        uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
+                                        uniprot_id = line_data[uniprot_col_index]
+                                    searched_data = []
+                                    sample_annotation = SampleAnnotation.objects.filter(file=related).first()
+                                    if sample_annotation:
+                                        annotation = json.loads(sample_annotation.annotations)
+                                        for a in annotation:
+                                            if a["Sample"] in column_headers_map:
+                                                sample_col_index = column_headers_map[a["Sample"]]
+                                                searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
+                                                                      "Value": float(line_data[sample_col_index])})
+                                    search_result = SearchResult(
+                                        search_term="",
+                                        file=related,
+                                        session=self,
+                                        analysis_group=related.analysis_group,
+                                        gene_name=gene_name,
+                                        uniprot_id=uniprot_id,
+                                        primary_id=primary_id,
+                                        searched_data=json.dumps(searched_data).replace("NaN", "null")
+                                    )
+                                    result_in_file.append(search_result)
+
+            current_progress += 1
+            results.extend(result_in_file)
+        SearchResult.objects.bulk_create(results)
         self.in_progress = False
         self.completed = True
         self.save()
 
     def extract_result_data(self, column_headers_map, file, found_term, result):
-        print(file.file_category)
+        # print(file.file_category)
         if file.file_category == "df":
             comparison_matrix = ComparisonMatrix.objects.filter(file=file).first()
-            matrix = json.loads(comparison_matrix.matrix)
-            print(matrix)
-            for m in matrix:
-                print(result["context"])
-                log2_fc = float(result["context"][column_headers_map[m["fold_change_col"]]])
-                print(log2_fc)
-                log10_p = float(result["context"][column_headers_map[m["p_value_col"]]])
-                if self.apply_fc_pvalue_filter(log2_fc, log10_p):
-                    sr = SearchResult(
-                        search_term=found_term,
-                        file=file,
-                        session=self,
-                        analysis_group=file.analysis_group,
-                        condition_A=m["condition_A"],
-                        condition_B=m["condition_B"],
-                        log2_fc=log2_fc,
-                        log10_p=log10_p,
-                    )
-                    if "comparison_col" in m:
-                        if m["comparison_col"] in column_headers_map:
-                            sr.comparison_label = result["context"][column_headers_map[m["comparison_col"]]]
-                            if m["comparison_label"]:
-                                sr.comparison_label += f"({m['comparison_label']})"
+            if comparison_matrix.matrix:
+                matrix = json.loads(comparison_matrix.matrix)
+                # print(matrix)
+                for m in matrix:
+                    # print(result["context"])
+                    log2_fc = float(result["context"][column_headers_map[m["fold_change_col"]]])
+                    # print(log2_fc)
+                    log10_p = float(result["context"][column_headers_map[m["p_value_col"]]])
+                    if self.apply_fc_pvalue_filter(log2_fc, log10_p):
+                        sr = SearchResult(
+                            search_term=found_term,
+                            file=file,
+                            session=self,
+                            analysis_group=file.analysis_group,
+                            condition_A=m["condition_A"],
+                            condition_B=m["condition_B"],
+                            log2_fc=log2_fc,
+                            log10_p=log10_p,
+                        )
+                        if "comparison_col" in m:
+                            if m["comparison_col"] in column_headers_map:
+                                sr.comparison_label = result["context"][column_headers_map[m["comparison_col"]]]
+                                if m["comparison_label"]:
+                                    sr.comparison_label += f"({m['comparison_label']})"
+                            else:
+                                sr.comparison_label = m["comparison_label"]
                         else:
                             sr.comparison_label = m["comparison_label"]
-                    else:
-                        sr.comparison_label = m["comparison_label"]
-                    yield sr
+                        yield sr
         else:
             sr = SearchResult(
                 search_term=found_term,
@@ -448,9 +503,9 @@ class SearchSession(models.Model):
             if sample_annotation:
                 annotation = json.loads(sample_annotation.annotations)
                 searched_data = []
-                print(annotation)
+                #print(annotation)
                 for a in annotation:
-                    print(result["context"])
+                    #print(result["context"])
 
                     if a["Sample"] in column_headers_map:
                         sample_col_index = column_headers_map[a["Sample"]]
