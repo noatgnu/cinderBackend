@@ -1,10 +1,15 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.shortcuts import render
 from drf_chunked_upload.exceptions import ChunkedUploadError
 from drf_chunked_upload.views import ChunkedUploadView
 from rest_framework import status
+from rest_framework.authtoken.models import Token
 from rest_framework.generics import get_object_or_404
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import MultiPartParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 
 # Create your views here.
@@ -98,3 +103,18 @@ class DataChunkedUploadView(ChunkedUploadView):
 
     def on_completion(self, chunked_upload, request):
         return super().on_completion(chunked_upload, request)
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, JSONParser)
+
+    def post(self, request):
+        channel_layer = get_channel_layer()
+        session_id = request.data.get("session_id")
+        async_to_sync(channel_layer.group_send)(
+            f"search_{session_id}", {
+                "type": "search_message", "message": {
+                    "type": "logout",
+                }})
+        return Response(status=status.HTTP_200_OK)
