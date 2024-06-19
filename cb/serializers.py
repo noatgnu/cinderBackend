@@ -55,7 +55,7 @@ class SearchResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = SearchResult
         fields = ['id', 'search_term', 'created_at', 'updated_at', 'session', 'analysis_group', 'file', 'primary_id', 'gene_name', 'uniprot_id',
-                  'log2_fc', 'log10_p', 'searched_data', 'comparison_label', 'condition_A', 'condition_B']
+                  'log2_fc', 'log10_p', 'searched_data', 'comparison_label', 'condition_A', 'condition_B', 'copy_number', 'rank']
 
 
 class SearchSessionSerializer(serializers.ModelSerializer):
