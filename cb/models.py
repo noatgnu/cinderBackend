@@ -58,7 +58,16 @@ class AnalysisGroup(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='analysis_groups', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    ptm = models.BooleanField(default=False)
+    analysis_group_type_choices = [
+        ('proteomics', 'Proteomics'),
+        ('ptm', 'Post-translational Modification'),
+        ('proteogenomics', 'Proteogenomics'),
+        ('metabolomics', 'Metabolomics'),
+        ('lipidomics', 'Lipidomics'),
+        ('glycomics', 'Glycomics'),
+        ('glycoproteomics', 'Glycoproteomics'),
+    ]
+    analysis_group_type = models.CharField(max_length=255, choices=analysis_group_type_choices, default='proteomics')
     curtain_link = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:

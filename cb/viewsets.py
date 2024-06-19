@@ -136,8 +136,12 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         name = request.data['name']
         description = request.data['description']
         project_id = request.data['project']
+
         project = Project.objects.get(id=project_id)
         analysis_group = AnalysisGroup.objects.create(name=name, description=description, project=project)
+        if "analysis_group_type" in request.data:
+            analysis_group.analysis_group_type = request.data['analysis_group_type']
+
         data = AnalysisGroupSerializer(analysis_group).data
         return Response(data, status=status.HTTP_201_CREATED)
 

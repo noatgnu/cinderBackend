@@ -21,7 +21,7 @@ class ProjectFileSerializer(serializers.ModelSerializer):
 class AnalysisGroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnalysisGroup
-        fields = ['id', 'name', 'description', 'project', 'created_at', 'updated_at', 'ptm', 'curtain_link']
+        fields = ['id', 'name', 'description', 'project', 'created_at', 'updated_at', 'analysis_group_type', 'curtain_link']
 
 
 class SampleAnnotationSerializer(serializers.ModelSerializer):
