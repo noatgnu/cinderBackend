@@ -45,7 +45,7 @@ class SearchResultSerializer(serializers.ModelSerializer):
         return {'id': search_result.file.id, 'name': search_result.file.name, 'file_type': search_result.file.file_type, 'file_category': search_result.file.file_category}
 
     def get_analysis_group(self, search_result):
-        return {'id': search_result.analysis_group.id, 'name': search_result.analysis_group.name, 'ptm': search_result.analysis_group.ptm}
+        return {'id': search_result.analysis_group.id, 'name': search_result.analysis_group.name, 'analysis_group_type': search_result.analysis_group.analysis_group_type}
 
     def get_searched_data(self, search_result):
         if search_result.searched_data is None:
