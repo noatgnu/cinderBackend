@@ -3,7 +3,7 @@ import json
 from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
-    SearchSession, Species
+    SearchSession, Species, CurtainData
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -79,3 +79,38 @@ class SpeciesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Species
         fields = ['id', 'code', 'taxon', 'common_name', 'official_name', 'synonym']
+
+class CurtainDataSerializer(serializers.ModelSerializer):
+    settings = serializers.SerializerMethodField()
+    data = serializers.SerializerMethodField()
+    annotations = serializers.SerializerMethodField()
+    selections = serializers.SerializerMethodField()
+    selection_map = serializers.SerializerMethodField()
+
+    def get_settings(self, curtain_data):
+        if curtain_data.settings is None:
+            return None
+        return json.loads(curtain_data.settings)
+
+    def get_data(self, curtain_data):
+        if curtain_data.data is None:
+            return None
+        return json.loads(json.loads(curtain_data.data))
+
+    def get_annotations(self, curtain_data):
+        if curtain_data.annotations is None:
+            return None
+        return json.loads(curtain_data.annotations)
+
+    def get_selections(self, curtain_data):
+        if curtain_data.selections is None:
+            return None
+        return json.loads(curtain_data.selections)
+
+    def get_selection_map(self, curtain_data):
+        if curtain_data.selection_map is None:
+            return None
+        return json.loads(curtain_data.selection_map)
+    class Meta:
+        model = CurtainData
+        fields = ['id', 'data', 'settings', 'host', 'link_id', 'analysis_group', 'created_at', 'updated_at', 'annotations', 'selections', 'selection_map']

@@ -266,6 +266,7 @@ STORAGES = {
     },
 }
 
+
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
@@ -274,3 +275,6 @@ MEDIA_URL = "/media/"
 
 DRF_CHUNKED_UPLOAD_ABSTRACT_MODEL = False
 DRF_CHUNKED_UPLOAD_CHECKSUM = 'sha256'
+
+# CURTAIN settings
+CURTAIN_HOST = os.environ.get("CURTAIN_HOST", "https://celsus.muttsu.xyz")

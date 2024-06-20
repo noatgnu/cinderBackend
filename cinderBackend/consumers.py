@@ -33,3 +33,35 @@ class SearchConsumer(AsyncJsonWebsocketConsumer):
     async def search_message(self, event):
         message = event['message']
         await self.send_json(message)
+
+
+class CurtainConsumer(AsyncJsonWebsocketConsumer):
+    async def connect(self):
+        self.session_id = self.scope['url_route']['kwargs']['session_id']
+        await self.channel_layer.group_add(
+            "curtain_" + self.session_id,
+            self.channel_name
+        )
+        await self.accept()
+        await self.send_json({
+            "message": {"type": "notification", "content": "Connected to curtain session."}
+        })
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            "curtain_" + self.session_id,
+            self.channel_name
+        )
+
+    async def receive_json(self, content, **kwargs):
+        await self.channel_layer.group_send(
+            "curtain_" + self.session_id,
+            {
+                "type": "curtain_message",
+                "message": content
+            }
+        )
+
+    async def curtain_message(self, event):
+        message = event['message']
+        await self.send_json(message)

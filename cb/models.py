@@ -6,8 +6,11 @@ import re
 import subprocess
 from typing import List, Dict, Optional
 
+import numpy as np
+import pandas as pd
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from curtainutils.client import CurtainClient, CurtainUniprotData
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVectorField, SearchHeadline, SearchVector
 from django.db import models
@@ -655,6 +658,67 @@ class Species(models.Model):
     class Meta:
         app_label = 'cb'
         ordering = ['official_name']
+
+
+class CurtainData(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    host = models.CharField(max_length=255)
+    link_id = models.CharField(max_length=255)
+    analysis_group = models.ForeignKey(AnalysisGroup, on_delete=models.CASCADE, related_name='curtain_data', blank=True, null=True)
+    data = models.TextField(blank=True, null=True)
+    settings = models.TextField(blank=True, null=True)
+    annotations = models.TextField(blank=True, null=True)
+    selections = models.TextField(blank=True, null=True)
+    selection_map = models.TextField(blank=True, null=True)
+
+    class Meta:
+        app_label = 'cb'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.link_id} - {self.host} - Created: {self.created_at}"
+
+    def __repr__(self):
+        return f"{self.link_id} - {self.host} - Created: {self.created_at}"
+
+    def get_curtain_data(self):
+        client = CurtainClient(self.host)
+        data = client.download_curtain_session(self.link_id)
+        differential_analysis_file = self.analysis_group.project_files.filter(file_category="df").first()
+        diff_df = pd.read_csv(differential_analysis_file.file.path, sep=differential_analysis_file.get_delimiter())
+        primary_id_col = data["differentialForm"]["_primaryIDs"]
+        fold_change_col = data["differentialForm"]["_foldChange"]
+        p_value_col = data["differentialForm"]["_significant"]
+        if data["differentialForm"]["_comparison"]:
+            comparison_col = data["differentialForm"]["_comparison"]
+            if data["differentialForm"]["_comparisonSelect"]:
+                comparison_label = data["differentialForm"]["_comparisonSelect"]
+                diff_df[comparison_col] = diff_df[comparison_col].astype(str)
+                diff_df = diff_df[diff_df[comparison_col].isin(comparison_label)]
+        if data["differentialForm"]["_transformFC"]:
+            diff_df[fold_change_col] = np.log2(diff_df[fold_change_col])
+        if data["differentialForm"]["_transformSignificant"]:
+            diff_df[p_value_col] = -np.log10(diff_df[p_value_col])
+        if data["differentialForm"]["_reverseFoldChange"]:
+            diff_df[fold_change_col] = -diff_df[fold_change_col]
+        curtain_data = CurtainUniprotData(data["extraData"]["uniprot"])
+        def parse_data(row: pd.Series, curtain_data: CurtainUniprotData, primary_id_col: str):
+            uniprot = curtain_data.get_uniprot_data_from_pi(row[primary_id_col])
+            if isinstance(uniprot, pd.Series):
+                row["Gene Names"] = uniprot["Gene Names"]
+                row["Entry"] = uniprot["Entry"]
+            return row
+
+        diff_df = diff_df.apply(lambda x: parse_data(x, curtain_data, primary_id_col), axis=1)
+        self.settings = json.dumps(data["settings"])
+        diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry"]]
+        diff_df.rename(columns={primary_id_col: "Primary ID", fold_change_col: "Fold Change", p_value_col: "P-value"}, inplace=True)
+        self.data = json.dumps(diff_df.to_json(orient="records"))
+        self.annotations = json.dumps([data["annotatedData"][k] for k in data["annotatedData"]])
+        self.selections = json.dumps(data["selectionsName"])
+        self.selection_map = json.dumps(data["selectionsMap"])
+        self.save()
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):

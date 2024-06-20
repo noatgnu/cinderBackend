@@ -17,13 +17,14 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
-from cb.rq_tasks import start_search_session
+from cb.rq_tasks import start_search_session, load_curtain_data
+from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
-    SearchSession, Species
+    SearchSession, Species, CurtainData
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
-    SpeciesSerializer
+    SpeciesSerializer, CurtainDataSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -141,16 +142,29 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         analysis_group = AnalysisGroup.objects.create(name=name, description=description, project=project)
         if "analysis_group_type" in request.data:
             analysis_group.analysis_group_type = request.data['analysis_group_type']
+        if "curtain_link" in request.data:
+            analysis_group.curtain_link = request.data['curtain_link']
 
         data = AnalysisGroupSerializer(analysis_group).data
         return Response(data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
-        analysis_group = self.get_object()
+        analysis_group: AnalysisGroup = self.get_object()
         analysis_group.name = request.data['name']
         analysis_group.description = request.data['description']
+        if "curtain_link" in request.data:
+            if analysis_group.curtain_link != request.data['curtain_link']:
+                load_curtain_data.delay(analysis_group.id, request.data['curtain_link'], request.data['session_id'])
+                analysis_group.curtain_link = request.data['curtain_link']
         analysis_group.save()
         return Response(AnalysisGroupSerializer(analysis_group).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def refresh_curtain_data(self, request, pk=None):
+        analysis_group = self.get_object()
+        session_id = self.request.data['session_id']
+        load_curtain_data.delay(analysis_group.id, analysis_group.curtain_link, session_id)
+        return Response(status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         analysis_group = self.get_object()
@@ -169,6 +183,14 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         count = AnalysisGroup.objects.count()
         return Response({"count": count}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['get'])
+    def get_curtain_data(self, request, pk=None):
+        analysis_group = self.get_object()
+        data = CurtainData.objects.filter(analysis_group=analysis_group)
+        if not data.exists():
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        data = CurtainDataSerializer(data.first()).data
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
