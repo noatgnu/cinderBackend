@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import io
 import json
 import os
 import re
@@ -686,7 +687,10 @@ class CurtainData(models.Model):
         client = CurtainClient(self.host)
         data = client.download_curtain_session(self.link_id)
         differential_analysis_file = self.analysis_group.project_files.filter(file_category="df").first()
-        diff_df = pd.read_csv(differential_analysis_file.file.path, sep=differential_analysis_file.get_delimiter())
+        if data["processed"]:
+            diff_df = pd.read_csv(io.StringIO(data["processed"]), sep=None)
+        else:
+            diff_df = pd.read_csv(differential_analysis_file.file.path, sep=differential_analysis_file.get_delimiter())
         primary_id_col = data["differentialForm"]["_primaryIDs"]
         fold_change_col = data["differentialForm"]["_foldChange"]
         p_value_col = data["differentialForm"]["_significant"]

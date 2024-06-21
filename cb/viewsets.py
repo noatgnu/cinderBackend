@@ -371,6 +371,7 @@ class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
     pagination_class = LimitOffsetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'created_at', 'log2_fc', 'log10_p', 'search_term']
+    search_fields = ['search_term', 'gene_name', 'uniprot_id', 'primary_id']
 
     def get_queryset(self):
         query = Q()
