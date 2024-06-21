@@ -41,7 +41,13 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        return queryset
+        species = self.request.query_params.get('species', None)
+        query = Q()
+        if species:
+            query &= Q(species__id__in=species.split(","))
+
+
+        return queryset.filter(query)
 
     def get_object(self):
         return super().get_object()
@@ -128,10 +134,14 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if 'project' in self.request.query_params:
-            project_id = self.request.query_params['project']
-            return queryset.filter(project__id=project_id)
-        return queryset
+        query = Q()
+        project = self.request.query_params.get('project', None)
+        if project:
+            query &= Q(project__id=project)
+        analysis_group_type = self.request.query_params.get('analysis_group_type', None)
+        if analysis_group_type:
+            query &= Q(analysis_group_type__in=analysis_group_type.split(","))
+        return queryset.filter(query)
 
     def create(self, request, *args, **kwargs):
         name = request.data['name']
