@@ -318,6 +318,7 @@ class SearchSession(models.Model):
         results = []
 
         for f in files:
+
             if f.id not in term_headline_file_dict:
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
             term_contexts = f.get_search_items_from_headline()
@@ -341,7 +342,7 @@ class SearchSession(models.Model):
                     "current_progress": current_progress,
                 }})
 
-
+        primary_id_analysis_group_result_map = {}
         for f in term_headline_file_dict:
             related_files = term_headline_file_dict[f]['file'].analysis_group.project_files.all().exclude(id=f)
             result_in_file = []
@@ -357,74 +358,22 @@ class SearchSession(models.Model):
                     }})
             term_contexts = term_headline_file_dict[f]['term_contexts']
 
-            if term_contexts:
-                file = term_headline_file_dict[f]['file']
-                search_result_dict = {}
-                # for term in term_contexts:
-                #
-                #     if term not in search_result_dict:
-                #
-                #         search_result = SearchResult.objects.create(search_term=term,
-                #                                                 #headline_results=json.dumps(list(set(term_contexts[term]))),
-                #                                                 file=file,
-                #                                                 session=self,
-                #                                                 analysis_group=file.analysis_group
-                #                                                 )
-                #         search_result_dict[term] = search_result
-
-                line_term_already_found = {term: [] for term in term_contexts}
-                first_line_of_file = ""
-                column_headers_map = {}
-                with file.file.open('rt') as infile:
-                    first_line_of_file = infile.readline()
-                    first_line_header = csv.reader([first_line_of_file], delimiter=file.get_delimiter())
-                    column_headers_map = {h: i for i, h in enumerate(next(first_line_header))}
-                for result in self.get_contexts(file, term_contexts):
-                    found_term = result["term"].lower()
-                    if file.extra_data:
-                        extra_data = json.loads(file.extra_data)
-                        for search_result in self.extract_result_data(column_headers_map, file, found_term, result):
-                            gene_name = ""
-                            primary_id = ""
-                            uniprot_id = ""
-                            if "gene_name_col" in extra_data:
-                                gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
-                                gene_name = result["context"][gene_name_col_index]
-                            if "primary_id_col" in extra_data:
-                                primary_id_col_index = column_headers_map[extra_data["primary_id_col"]]
-                                primary_id = result["context"][primary_id_col_index]
-                            if "uniprot_id_col" in extra_data:
-                                uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
-                                uniprot_id = result["context"][uniprot_col_index]
-                            search_result.gene_name = gene_name
-                            search_result.primary_id = primary_id
-                            search_result.uniprot_id = uniprot_id
-
-                            if self.search_mode == "gene":
-                                if "gene_name_col" in extra_data:
-                                    if found_term in gene_name.lower():
-                                        result_in_file.append(search_result)
-
-                            elif self.search_mode == "uniprot":
-                                if "uniprot_col" in extra_data:
-                                    if found_term in uniprot_id.lower():
-                                        result_in_file.append(search_result)
-                            elif self.search_mode == "pi":
-                                if "primary_id_col" in extra_data:
-                                    if found_term in primary_id.lower():
-                                        result_in_file.append(search_result)
-
-                            else:
-                                result_in_file.append(search_result)
-                            if primary_id not in pi_list:
-                                pi_list.append(primary_id)
+            for result in self.extract_result(f, term_contexts, term_headline_file_dict):
+                if result.primary_id not in pi_list:
+                    pi_list.append(result.primary_id)
+                if result.primary_id not in primary_id_analysis_group_result_map:
+                    primary_id_analysis_group_result_map[result.primary_id] = {}
+                if result.file.analysis_group.id not in primary_id_analysis_group_result_map[result.primary_id]:
+                    primary_id_analysis_group_result_map[result.primary_id][result.file.analysis_group.id] = {}
+                if result.comparison_label not in primary_id_analysis_group_result_map[result.primary_id][result.file.analysis_group.id]:
+                    primary_id_analysis_group_result_map[result.primary_id][result.file.analysis_group.id][result.comparison_label] = result
+                else:
+                    primary_id_analysis_group_result_map[result.primary_id][result.file.analysis_group.id][result.comparison_label] += f",{result.search_term}"
             for related in related_files:
-                print(related)
                 with related.file.open('rt') as infile:
                     first_line_of_file = infile.readline()
                     first_line_header = csv.reader([first_line_of_file], delimiter=related.get_delimiter())
                     column_headers_map = {h: i for i, h in enumerate(next(first_line_header))}
-                    print(related.extra_data)
                     if related.extra_data:
                         extra_data = json.loads(related.extra_data)
                         if "primary_id_col" in extra_data:
@@ -432,9 +381,7 @@ class SearchSession(models.Model):
                             for line in infile:
                                 line_data = next(csv.reader([line], delimiter=related.get_delimiter()))
                                 primary_id = line_data[primary_id_col_index]
-
                                 if primary_id in pi_list:
-                                    print(primary_id)
                                     if related.file_category == "searched":
                                         gene_name = ""
                                         uniprot_id = ""
@@ -463,7 +410,11 @@ class SearchSession(models.Model):
                                             primary_id=primary_id,
                                             searched_data=json.dumps(searched_data).replace("NaN", "null")
                                         )
-                                        result_in_file.append(search_result)
+                                        if primary_id in primary_id_analysis_group_result_map:
+                                            if related.analysis_group.id in primary_id_analysis_group_result_map[primary_id]:
+                                                for comparison_label in primary_id_analysis_group_result_map[primary_id][related.analysis_group.id]:
+                                                    primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][comparison_label].searched_data = search_result.searched_data
+                                        #result_in_file.append(search_result)
                                     elif related.file_category == "df":
                                         comparison_matrix = ComparisonMatrix.objects.filter(file=related).first()
                                         if comparison_matrix.matrix:
@@ -491,7 +442,18 @@ class SearchSession(models.Model):
                                                             sr.comparison_label = m["comparison_label"]
                                                     else:
                                                         sr.comparison_label = m["comparison_label"]
-                                                    result_in_file.append(sr)
+                                                    if primary_id in primary_id_analysis_group_result_map:
+                                                        if related.analysis_group.id in primary_id_analysis_group_result_map[primary_id]:
+                                                            if sr.comparison_label in primary_id_analysis_group_result_map[primary_id][related.analysis_group.id]:
+                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].log2_fc = sr.log2_fc
+                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].log10_p = sr.log10_p
+                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].comparison_label = sr.comparison_label
+                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].condition_A = sr.condition_A
+                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].condition_B = sr.condition_B
+                                                            else:
+                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label] = sr
+                                                    #result_in_file.append(sr)
+
                                     elif related.file_category == "copy_number":
                                         if "copy_number_col" in extra_data and "rank_col" in extra_data:
                                             copy_number_col_index = column_headers_map[extra_data["copy_number_col"]]
@@ -506,14 +468,84 @@ class SearchSession(models.Model):
                                                 copy_number=copy_number,
                                                 rank=rank,
                                             )
-                                            result_in_file.append(sr)
+                                            if primary_id in primary_id_analysis_group_result_map:
+                                                if related.analysis_group.id in primary_id_analysis_group_result_map[primary_id]:
+                                                    for comparison_label in primary_id_analysis_group_result_map[primary_id][related.analysis_group.id]:
+                                                        primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][comparison_label].copy_number = sr.copy_number
+                                                        primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][comparison_label].rank = sr.rank
+                                            #result_in_file.append(sr)
 
             current_progress += 1
-            results.extend(result_in_file)
+            #results.extend(result_in_file)
+        for primary_id in primary_id_analysis_group_result_map:
+            for analysis_group_id in primary_id_analysis_group_result_map[primary_id]:
+                for comparison_label in primary_id_analysis_group_result_map[primary_id][analysis_group_id]:
+                    results.append(primary_id_analysis_group_result_map[primary_id][analysis_group_id][comparison_label])
         SearchResult.objects.bulk_create(results)
         self.in_progress = False
         self.completed = True
         self.save()
+
+    def extract_result(self, f, term_contexts, term_headline_file_dict):
+        if term_contexts:
+            file = term_headline_file_dict[f]['file']
+            search_result_dict = {}
+            # for term in term_contexts:
+            #
+            #     if term not in search_result_dict:
+            #
+            #         search_result = SearchResult.objects.create(search_term=term,
+            #                                                 #headline_results=json.dumps(list(set(term_contexts[term]))),
+            #                                                 file=file,
+            #                                                 session=self,
+            #                                                 analysis_group=file.analysis_group
+            #                                                 )
+            #         search_result_dict[term] = search_result
+
+            line_term_already_found = {term: [] for term in term_contexts}
+            first_line_of_file = ""
+            column_headers_map = {}
+            with file.file.open('rt') as infile:
+                first_line_of_file = infile.readline()
+                first_line_header = csv.reader([first_line_of_file], delimiter=file.get_delimiter())
+                column_headers_map = {h: i for i, h in enumerate(next(first_line_header))}
+            for result in self.get_contexts(file, term_contexts):
+                found_term = result["term"].lower()
+                if file.extra_data:
+                    extra_data = json.loads(file.extra_data)
+                    for search_result in self.extract_result_data(column_headers_map, file, found_term, result):
+                        gene_name = ""
+                        primary_id = ""
+                        uniprot_id = ""
+                        if "gene_name_col" in extra_data:
+                            gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
+                            gene_name = result["context"][gene_name_col_index]
+                        if "primary_id_col" in extra_data:
+                            primary_id_col_index = column_headers_map[extra_data["primary_id_col"]]
+                            primary_id = result["context"][primary_id_col_index]
+                        if "uniprot_id_col" in extra_data:
+                            uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
+                            uniprot_id = result["context"][uniprot_col_index]
+                        search_result.gene_name = gene_name
+                        search_result.primary_id = primary_id
+                        search_result.uniprot_id = uniprot_id
+
+                        if self.search_mode == "gene":
+                            if "gene_name_col" in extra_data:
+                                if found_term in gene_name.lower():
+                                    yield search_result
+
+                        elif self.search_mode == "uniprot":
+                            if "uniprot_col" in extra_data:
+                                if found_term in uniprot_id.lower():
+                                    yield search_result
+                        elif self.search_mode == "pi":
+                            if "primary_id_col" in extra_data:
+                                if found_term in primary_id.lower():
+                                    yield search_result
+                        else:
+                            yield search_result
+
 
     def extract_result_data(self, column_headers_map, file, found_term, result):
         # print(file.file_category)
