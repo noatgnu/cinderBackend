@@ -4,6 +4,7 @@ import os
 import re
 import uuid
 
+import pandas as pd
 from django.contrib.postgres.search import SearchQuery, SearchHeadline
 from django.db.models import Q
 from django_filters import filters
@@ -296,6 +297,18 @@ class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
         comparison_matrices = ComparisonMatrix.objects.filter(file=file)
         data = ComparisonMatrixSerializer(comparison_matrices.first(), many=False).data
         return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def get_unique_comparison_label(self, request, pk=None):
+        file = self.get_object()
+        column = request.query_params.get('column', None)
+        if not column:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        with file.file.open("rt") as f:
+            data = pd.read_csv(f, sep=None)
+            labels = data[column].unique()
+        return Response(list(labels), status=status.HTTP_200_OK)
+
 
 
 class ComparisonMatrixViewSet(viewsets.ModelViewSet, FilterMixin):

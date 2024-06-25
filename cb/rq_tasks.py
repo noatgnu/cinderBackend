@@ -18,7 +18,7 @@ def start_search_session(search_session_id: int):
             "type": "search_message", "message": {
                 "type": "search_status",
                 "status": "started",
-                "id": session.session_id
+                "id": session.id
             }})
     try:
         session.search_data()

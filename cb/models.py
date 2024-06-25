@@ -573,14 +573,19 @@ class SearchSession(models.Model):
                             )
                             if "comparison_col" in m:
                                 if m["comparison_col"] in column_headers_map:
-                                    sr.comparison_label = result["context"][column_headers_map[m["comparison_col"]]]
+                                    label = result["context"][column_headers_map[m["comparison_col"]]]
+                                    print(label, m["comparison_label"])
                                     if m["comparison_label"]:
-                                        sr.comparison_label += f"({m['comparison_label']})"
+                                        if label == m['comparison_label']:
+                                            sr.comparison_label = m['comparison_label']
+
                                 else:
                                     sr.comparison_label = m["comparison_label"]
                             else:
                                 sr.comparison_label = m["comparison_label"]
-                            yield sr
+                            if sr.comparison_label:
+                                if len(sr.comparison_label) > 0:
+                                    yield sr
         else:
             sr = SearchResult(
                 search_term=found_term,

@@ -84,7 +84,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'cinderBackend.wsgi.application'
-ASGI_APPLICATION = 'cupcake.asgi.application'
+ASGI_APPLICATION = 'cinderBackend.asgi.application'
 
 
 # Database
