@@ -18,7 +18,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
-from cb.rq_tasks import start_search_session, load_curtain_data
+from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysis_group_from_curtain_data
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
@@ -175,6 +175,13 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         analysis_group = self.get_object()
         session_id = self.request.data['session_id']
         load_curtain_data.delay(analysis_group.id, analysis_group.curtain_link, session_id)
+        return Response(status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def compose_files_from_curtain_data(self, request, pk=None):
+        analysis_group = self.get_object()
+        session_id = self.request.data['session_id']
+        compose_analysis_group_from_curtain_data.delay(analysis_group.id, analysis_group.curtain_link, session_id)
         return Response(status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
