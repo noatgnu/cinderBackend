@@ -22,7 +22,7 @@ from cb.rq_tasks import start_search_session, load_curtain_data
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
-    SearchSession, Species, CurtainData
+    SearchSession, Species, CurtainData, Abs
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
     SpeciesSerializer, CurtainDataSerializer
@@ -407,6 +407,14 @@ class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
         primary_id = self.request.query_params.get('primary_id', None)
         if primary_id:
             query &= Q(primary_id=primary_id)
+        log2_fc = self.request.query_params.get('log2_fc', None)
+        if log2_fc:
+            self.queryset = self.queryset.annotate(abs_log2_fc=Abs('log2_fc'))
+            query &= Q(abs_log2_fc__gte=float(log2_fc))
+        log10_p = self.request.query_params.get('log10_p', None)
+        if log10_p:
+            query &= Q(abs_log10_p__gte=float(log10_p))
+
         return self.queryset.filter(query)
 
     def get_object(self):

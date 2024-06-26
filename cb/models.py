@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import uuid
 from typing import List, Dict, Optional
 
 import numpy as np
@@ -15,6 +16,7 @@ from curtainutils.client import CurtainClient, CurtainUniprotData
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVectorField, SearchHeadline, SearchVector
 from django.db import models
+from django.db.models import Func
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
@@ -29,6 +31,9 @@ import cb
 # else:
 #     from django.contrib.postgres.indexes import GinIndex
 #     from django.contrib.postgres.search import SearchVectorField, SearchHeadline
+
+class Abs(Func):
+    function = 'ABS'
 
 
 # Project model represents a project in the system.
@@ -720,6 +725,26 @@ class CurtainData(models.Model):
     def __repr__(self):
         return f"{self.link_id} - {self.host} - Created: {self.created_at}"
 
+    def parse_curtain_data(self, data: dict, diff_df: pd.DataFrame, primary_id_col: str, fold_change_col: str, p_value_col: str):
+        curtain_data = CurtainUniprotData(data["extraData"]["uniprot"])
+        def parse_data(row: pd.Series, curtain_data: CurtainUniprotData, primary_id_col: str):
+            uniprot = curtain_data.get_uniprot_data_from_pi(row[primary_id_col])
+            if isinstance(uniprot, pd.Series):
+                row["Gene Names"] = uniprot["Gene Names"]
+                row["Entry"] = uniprot["Entry"]
+            return row
+
+        diff_df = diff_df.apply(lambda x: parse_data(x, curtain_data, primary_id_col), axis=1)
+        self.settings = json.dumps(data["settings"])
+        diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry"]]
+        diff_df.rename(columns={primary_id_col: "Primary ID", fold_change_col: "Fold Change", p_value_col: "P-value"},
+                       inplace=True)
+        self.data = json.dumps(diff_df.to_json(orient="records"))
+        self.annotations = json.dumps([data["annotatedData"][k] for k in data["annotatedData"]])
+        self.selections = json.dumps(data["selectionsName"])
+        self.selection_map = json.dumps(data["selectionsMap"])
+        self.save()
+
     def get_curtain_data(self):
         client = CurtainClient(self.host)
         data = client.download_curtain_session(self.link_id)
@@ -743,23 +768,137 @@ class CurtainData(models.Model):
             diff_df[p_value_col] = -np.log10(diff_df[p_value_col])
         if data["differentialForm"]["_reverseFoldChange"]:
             diff_df[fold_change_col] = -diff_df[fold_change_col]
-        curtain_data = CurtainUniprotData(data["extraData"]["uniprot"])
-        def parse_data(row: pd.Series, curtain_data: CurtainUniprotData, primary_id_col: str):
-            uniprot = curtain_data.get_uniprot_data_from_pi(row[primary_id_col])
-            if isinstance(uniprot, pd.Series):
-                row["Gene Names"] = uniprot["Gene Names"]
-                row["Entry"] = uniprot["Entry"]
-            return row
+        self.parse_curtain_data(data, diff_df, primary_id_col, fold_change_col, p_value_col)
 
-        diff_df = diff_df.apply(lambda x: parse_data(x, curtain_data, primary_id_col), axis=1)
-        self.settings = json.dumps(data["settings"])
-        diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry"]]
-        diff_df.rename(columns={primary_id_col: "Primary ID", fold_change_col: "Fold Change", p_value_col: "P-value"}, inplace=True)
-        self.data = json.dumps(diff_df.to_json(orient="records"))
-        self.annotations = json.dumps([data["annotatedData"][k] for k in data["annotatedData"]])
-        self.selections = json.dumps(data["selectionsName"])
-        self.selection_map = json.dumps(data["selectionsMap"])
-        self.save()
+    def compose_analysis_group_from_curtain_data(self, analysis_group: AnalysisGroup):
+        client = CurtainClient(self.host)
+        data = client.download_curtain_session(self.link_id)
+        diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
+        searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
+        media_folder = os.path.join(settings.MEDIA_ROOT, "chunked_uploads")
+        if not os.path.exists(media_folder):
+            os.makedirs(media_folder)
+        diff_file_path = os.path.join(media_folder, f"{uuid.uuid4().hex}.diff.txt")
+        if data["differentialForm"]["_transformFC"]:
+            diff_file[data["differentialForm"]["_foldChange"]] = np.log2(diff_file[data["differentialForm"]["_foldChange"]])
+        if data["differentialForm"]["_transformSignificant"]:
+            diff_file[data["differentialForm"]["_significant"]] = -np.log10(diff_file[data["differentialForm"]["_significant"]])
+        if data["differentialForm"]["_reverseFoldChange"]:
+            diff_file[data["differentialForm"]["_foldChange"]] = -diff_file[data["differentialForm"]["_foldChange"]]
+        if data["differentialForm"]["_comparison"]:
+            comparison_col = data["differentialForm"]["_comparison"]
+            diff_file[comparison_col] = diff_file[comparison_col].astype(str)
+        diff_file.to_csv(diff_file_path, sep="\t", index=False)
+        searched_file_path = os.path.join(media_folder, f"{uuid.uuid4().hex}.searched.txt")
+        searched_file.to_csv(searched_file_path, sep="\t", index=False)
+        diff_file_extra_data = {
+            "primary_id_col": data["differentialForm"]["_primaryIDs"],
+            "gene_name_col": None,
+            "uniprot_id_col": None,
+            "peptide_seq_col": None,
+            "modification_position_in_peptide_col": None,
+            "modification_position_in_protein_col": None,
+            "localization_prob_col": None,
+        }
+
+        diff_project_file = ProjectFile.objects.create(
+            name=f"{analysis_group.name} - Differential Analysis.txt",
+            description="Differential Analysis",
+            file_category="df",
+            file_type="txt",
+            analysis_group=analysis_group,
+            project=analysis_group.project,
+            file=diff_file_path,
+            load_file_content=True,
+            extra_data=json.dumps(diff_file_extra_data)
+        )
+        diff_project_file.save_altered()
+        searched_file_extra_data = {
+            "primary_id_col": data["rawForm"]["_primaryIDs"],
+            "gene_name_col": None,
+            "uniprot_id_col": None,
+        }
+        searched_project_file = ProjectFile.objects.create(
+            name=f"{analysis_group.name} - Searched Data.txt",
+            description="Searched Data",
+            file_category="searched",
+            file_type="txt",
+            analysis_group=analysis_group,
+            project=analysis_group.project,
+            file=searched_file_path,
+            load_file_content=True,
+            extra_data=json.dumps(searched_file_extra_data)
+        )
+        searched_project_file.save_altered()
+        annotations = []
+        for s in data["rawForm"]["_samples"]:
+            if "sampleMap" in data["settings"]:
+                if s in data["settings"]["sampleMap"]:
+                    annotations.append({"Sample": s, "Condition": data["settings"]["sampleMap"][s]["condition"]})
+                else:
+                    splitted = s.split(".")
+                    if len(splitted) > 1:
+                        annotations.append({"Sample": s, "Condition": splitted[0:len(splitted) - 1]})
+                    else:
+                        annotations.append({"Sample": s, "Condition": s})
+            else:
+                splitted = s.split(".")
+                if len(splitted) > 1:
+                    annotations.append({"Sample": s, "Condition": splitted[0:len(splitted)-1]})
+                else:
+                    annotations.append({"Sample": s, "Condition": s})
+        SampleAnnotation.objects.create(
+            name=f"{analysis_group.name} - Sample Annotations",
+            analysis_group=analysis_group,
+            file=searched_project_file,
+            annotations=json.dumps(annotations)
+        )
+
+        if data["differentialForm"]["_comparison"] == "CurtainSetComparison" or data["differentialForm"]["_comparison"] == "":
+            matrix = [
+                {
+                    "condition_A": "",
+                    "condition_B": "",
+                    "fold_change_col": data["differentialForm"]["_foldChange"],
+                    "p_value_col": data["differentialForm"]["_significant"],
+                    "comparison_col": "",
+                    "comparison_label": "1"
+                }
+            ]
+            comparison_matrix = ComparisonMatrix.objects.create(
+                name=f"{analysis_group.name} - Comparison Matrix",
+                analysis_group=analysis_group,
+                file=diff_project_file,
+                matrix=json.dumps(matrix)
+            )
+
+        else:
+            matrix = []
+            if "_comparisonSelect" in data["differentialForm"]:
+                comparison_labels = data["differentialForm"]["_comparisonSelect"]
+                for label in comparison_labels:
+                    matrix.append(
+                        {
+                            "condition_A": "",
+                            "condition_B": "",
+                            "fold_change_col": data["differentialForm"]["_foldChange"],
+                            "p_value_col": data["differentialForm"]["_significant"],
+                            "comparison_col": data["differentialForm"]["_comparison"],
+                            "comparison_label": label
+                        }
+                    )
+            comparison_matrix = ComparisonMatrix.objects.create(
+                name=f"{analysis_group.name} - Comparison Matrix",
+                analysis_group=analysis_group,
+                file=diff_project_file,
+                matrix=json.dumps(matrix)
+            )
+        self.parse_curtain_data(data, diff_file, data["differentialForm"]["_primaryIDs"], data["differentialForm"]["_foldChange"], data["differentialForm"]["_significant"])
+
+
+
+
+
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):

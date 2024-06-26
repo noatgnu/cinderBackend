@@ -75,3 +75,33 @@ def load_curtain_data(analysis_group_id: int, curtain_link: str, session_id: str
                 "status": "complete",
                 "analysis_group_id": analysis_group.id
             }})
+
+@job('default', timeout='3h')
+def compose_analysis_group_from_curtain_data(analysis_group_id: int, curtain_link: str, session_id: str):
+    channel_layer = get_channel_layer()
+    analysis_group = AnalysisGroup.objects.get(id=analysis_group_id)
+    pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+    match = re.search(pattern, curtain_link, re.I)
+    if match:
+        analysis_group.curtain_link = curtain_link
+        analysis_group.curtain_data.all().delete()
+        project_files = analysis_group.project.project_files.filter(file_category__in=["searched", "df"])
+        project_files.delete()
+        data = CurtainData.objects.create(analysis_group=analysis_group, host=settings.CURTAIN_HOST,
+                                          link_id=match.group(0))
+        async_to_sync(channel_layer.group_send)(
+            f"curtain_{session_id}", {
+                "type": "curtain_message", "message": {
+                    "type": "curtain_status",
+                    "status": "started",
+                    "analysis_group_id": analysis_group.id
+                }})
+        data.compose_analysis_group_from_curtain_data(analysis_group)
+        analysis_group.save()
+    async_to_sync(channel_layer.group_send)(
+        f"curtain_{session_id}", {
+            "type": "curtain_message", "message": {
+                "type": "curtain_status",
+                "status": "complete",
+                "analysis_group_id": analysis_group.id
+            }})
