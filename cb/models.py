@@ -410,8 +410,12 @@ class SearchSession(models.Model):
                                             for a in annotation:
                                                 if a["Sample"] in column_headers_map:
                                                     sample_col_index = column_headers_map[a["Sample"]]
-                                                    searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
+                                                    if line_data[sample_col_index] != "":
+                                                        searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
                                                                           "Value": float(line_data[sample_col_index])})
+                                                    else:
+                                                        searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
+                                                                          "Value": None})
                                         search_result = SearchResult(
                                             search_term="",
                                             file=related,
@@ -432,39 +436,44 @@ class SearchSession(models.Model):
                                         if comparison_matrix.matrix:
                                             matrix = json.loads(comparison_matrix.matrix)
                                             for m in matrix:
-                                                log2_fc = float(line_data[column_headers_map[m["fold_change_col"]]])
-                                                log10_p = float(line_data[column_headers_map[m["p_value_col"]]])
-                                                if self.apply_fc_pvalue_filter(log2_fc, log10_p):
-                                                    sr = SearchResult(
-                                                        search_term="",
-                                                        file=related,
-                                                        session=self,
-                                                        analysis_group=related.analysis_group,
-                                                        condition_A=m["condition_A"],
-                                                        condition_B=m["condition_B"],
-                                                        log2_fc=log2_fc,
-                                                        log10_p=log10_p,
-                                                    )
-                                                    if "comparison_col" in m:
-                                                        if m["comparison_col"] in column_headers_map:
-                                                            sr.comparison_label = line_data[column_headers_map[m["comparison_col"]]]
-                                                            if m["comparison_label"]:
-                                                                sr.comparison_label += f"({m['comparison_label']})"
+                                                log2_fc = None
+                                                log10_p = None
+                                                if line_data[column_headers_map[m["fold_change_col"]]] != "":
+                                                    log2_fc = float(line_data[column_headers_map[m["fold_change_col"]]])
+                                                if line_data[column_headers_map[m["p_value_col"]]] != "":
+                                                    log10_p = float(line_data[column_headers_map[m["p_value_col"]]])
+                                                if log2_fc and log10_p:
+                                                    if self.apply_fc_pvalue_filter(log2_fc, log10_p):
+                                                        sr = SearchResult(
+                                                            search_term="",
+                                                            file=related,
+                                                            session=self,
+                                                            analysis_group=related.analysis_group,
+                                                            condition_A=m["condition_A"],
+                                                            condition_B=m["condition_B"],
+                                                            log2_fc=log2_fc,
+                                                            log10_p=log10_p,
+                                                        )
+                                                        if "comparison_col" in m:
+                                                            if m["comparison_col"] in column_headers_map:
+                                                                sr.comparison_label = line_data[column_headers_map[m["comparison_col"]]]
+                                                                if m["comparison_label"]:
+                                                                    sr.comparison_label += f"({m['comparison_label']})"
+                                                            else:
+                                                                sr.comparison_label = m["comparison_label"]
                                                         else:
                                                             sr.comparison_label = m["comparison_label"]
-                                                    else:
-                                                        sr.comparison_label = m["comparison_label"]
-                                                    if primary_id in primary_id_analysis_group_result_map:
-                                                        if related.analysis_group.id in primary_id_analysis_group_result_map[primary_id]:
-                                                            if sr.comparison_label in primary_id_analysis_group_result_map[primary_id][related.analysis_group.id]:
-                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].log2_fc = sr.log2_fc
-                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].log10_p = sr.log10_p
-                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].comparison_label = sr.comparison_label
-                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].condition_A = sr.condition_A
-                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].condition_B = sr.condition_B
-                                                            else:
-                                                                primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label] = sr
-                                                    #result_in_file.append(sr)
+                                                        if primary_id in primary_id_analysis_group_result_map:
+                                                            if related.analysis_group.id in primary_id_analysis_group_result_map[primary_id]:
+                                                                if sr.comparison_label in primary_id_analysis_group_result_map[primary_id][related.analysis_group.id]:
+                                                                    primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].log2_fc = sr.log2_fc
+                                                                    primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].log10_p = sr.log10_p
+                                                                    primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].comparison_label = sr.comparison_label
+                                                                    primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].condition_A = sr.condition_A
+                                                                    primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].condition_B = sr.condition_B
+                                                                else:
+                                                                    primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label] = sr
+                                                        #result_in_file.append(sr)
 
                                     elif related.file_category == "copy_number":
                                         if "copy_number_col" in extra_data and "rank_col" in extra_data:
@@ -575,35 +584,40 @@ class SearchSession(models.Model):
                     # print(matrix)
                     for m in matrix:
                         # print(result["context"])
-                        log2_fc = float(result["context"][column_headers_map[m["fold_change_col"]]])
+                        log2_fc = None
+                        if result["context"][column_headers_map[m["fold_change_col"]]] != "":
+                            log2_fc = float(result["context"][column_headers_map[m["fold_change_col"]]])
                         # print(log2_fc)
-                        log10_p = float(result["context"][column_headers_map[m["p_value_col"]]])
-                        if self.apply_fc_pvalue_filter(log2_fc, log10_p):
-                            sr = SearchResult(
-                                search_term=found_term,
-                                file=file,
-                                session=self,
-                                analysis_group=file.analysis_group,
-                                condition_A=m["condition_A"],
-                                condition_B=m["condition_B"],
-                                log2_fc=log2_fc,
-                                log10_p=log10_p,
-                            )
-                            if "comparison_col" in m:
-                                if m["comparison_col"] in column_headers_map:
-                                    label = result["context"][column_headers_map[m["comparison_col"]]]
-                                    print(label, m["comparison_label"])
-                                    if m["comparison_label"]:
-                                        if label == m['comparison_label']:
-                                            sr.comparison_label = m['comparison_label']
+                        log10_p = None
+                        if result["context"][column_headers_map[m["p_value_col"]]] != "":
+                            log10_p = float(result["context"][column_headers_map[m["p_value_col"]]])
+                        if log2_fc and log10_p:
+                            if self.apply_fc_pvalue_filter(log2_fc, log10_p):
+                                sr = SearchResult(
+                                    search_term=found_term,
+                                    file=file,
+                                    session=self,
+                                    analysis_group=file.analysis_group,
+                                    condition_A=m["condition_A"],
+                                    condition_B=m["condition_B"],
+                                    log2_fc=log2_fc,
+                                    log10_p=log10_p,
+                                )
+                                if "comparison_col" in m:
+                                    if m["comparison_col"] in column_headers_map:
+                                        label = result["context"][column_headers_map[m["comparison_col"]]]
+                                        print(label, m["comparison_label"])
+                                        if m["comparison_label"]:
+                                            if label == m['comparison_label']:
+                                                sr.comparison_label = m['comparison_label']
 
+                                    else:
+                                        sr.comparison_label = m["comparison_label"]
                                 else:
                                     sr.comparison_label = m["comparison_label"]
-                            else:
-                                sr.comparison_label = m["comparison_label"]
-                            if sr.comparison_label:
-                                if len(sr.comparison_label) > 0:
-                                    yield sr
+                                if sr.comparison_label:
+                                    if len(sr.comparison_label) > 0:
+                                        yield sr
         else:
             sr = SearchResult(
                 search_term=found_term,
@@ -621,8 +635,12 @@ class SearchSession(models.Model):
 
                     if a["Sample"] in column_headers_map:
                         sample_col_index = column_headers_map[a["Sample"]]
-                        searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
-                                              "Value": float(result["context"][sample_col_index])})
+                        if result["context"][sample_col_index] != "":
+                            searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
+                                                  "Value": float(result["context"][sample_col_index])})
+                        else:
+                            searched_data.append({"Sample": a["Sample"], "Condition": a["Condition"],
+                                                  "Value": None})
                 if searched_data and len(searched_data) > 0:
                     sr.searched_data = json.dumps(searched_data).replace("NaN", "null")
                     yield sr
