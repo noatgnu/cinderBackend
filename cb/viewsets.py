@@ -6,7 +6,9 @@ import uuid
 
 import pandas as pd
 from django.contrib.postgres.search import SearchQuery, SearchHeadline
+from django.core.signing import TimestampSigner
 from django.db.models import Q
+from django.http import HttpResponse
 from django_filters import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters.views import FilterMixin
@@ -18,7 +20,8 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
-from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysis_group_from_curtain_data
+from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysis_group_from_curtain_data, \
+    export_search_data
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
@@ -397,6 +400,8 @@ class SampleAnnotationViewSet(viewsets.ModelViewSet, FilterMixin):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+
+
 class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = SearchResultSerializer
     queryset = SearchResult.objects.all()
@@ -404,7 +409,7 @@ class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filter_backends = [SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'created_at', 'log2_fc', 'log10_p', 'search_term']
     search_fields = ['search_term', 'gene_name', 'uniprot_id', 'primary_id']
 
@@ -425,12 +430,14 @@ class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
             query &= Q(abs_log2_fc__gte=float(log2_fc))
         log10_p = self.request.query_params.get('log10_p', None)
         if log10_p:
-            query &= Q(abs_log10_p__gte=float(log10_p))
-
-        return self.queryset.filter(query)
+            query &= Q(log10_p__gte=float(log10_p))
+        result = self.queryset.filter(query)
+        return result.all()
 
     def get_object(self):
-        return super().get_object()
+        object = super().get_object()
+        print(object)
+        return object
 
     def create(self, request, *args, **kwargs):
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
@@ -545,6 +552,31 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
     def session_id(self, request):
         return Response(str(uuid.uuid4()), status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'])
+    def export_search_data(self, request, pk=None):
+        sample_annotation = self.get_object()
+        filter_term = request.data['search_term']
+        filter_log2_fc = request.data.get('log2_fc', 0)
+        filter_log10_p = request.data.get('log10_p', 0)
+        session_id = request.data['session_id']
+        instance_id = request.data.get('instance_id', None)
+        export_search_data.delay(sample_annotation.id, filter_term, filter_log2_fc, filter_log10_p, session_id, instance_id)
+        return Response(status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def download_temp_file(self, request):
+        token = request.query_params.get('token', None)
+        if not token:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        signer = TimestampSigner()
+        try:
+            data = signer.unsign(token, max_age=60*30)
+            response = HttpResponse(status=200)
+            response["Content-Disposition"] = f'attachment; filename="{data}"'
+            response["X-Accel-Redirect"] = f"/media/temp/{data}"
+            return response
+        except Exception as e:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
 
 class SpeciesViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = SpeciesSerializer
