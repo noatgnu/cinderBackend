@@ -566,6 +566,7 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
     @action(detail=False, methods=['get'])
     def download_temp_file(self, request):
         token = request.query_params.get('token', None)
+        print(token)
         if not token:
             return Response(status=status.HTTP_400_BAD_REQUEST)
         signer = TimestampSigner()
