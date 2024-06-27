@@ -317,7 +317,12 @@ class SearchSession(models.Model):
             files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df"])
         else:
             files = ProjectFile.objects.filter(file_category__in=["df"])
-        files = files.filter(file_contents__search_vector=self.search_term).annotate(headline=SearchHeadline('file_contents__content', self.search_term, start_sel="<b>", stop_sel="</b>", highlight_all=True)).distinct()
+        files = files.filter(
+            file_contents__search_vector=self.search_term
+        ).annotate(
+            headline=SearchHeadline(
+                'file_contents__content', self.search_term, start_sel="<b>", stop_sel="</b>", highlight_all=True)
+        ).distinct()
         term_headline_file_dict = {}
         found_terms = []
         results = []
@@ -391,11 +396,13 @@ class SearchSession(models.Model):
                                         gene_name = ""
                                         uniprot_id = ""
                                         if "gene_name_col" in extra_data:
-                                            gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
-                                            gene_name = line_data[gene_name_col_index]
+                                            if extra_data["gene_name_col"]:
+                                                gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
+                                                gene_name = line_data[gene_name_col_index]
                                         if "uniprot_id_col" in extra_data:
-                                            uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
-                                            uniprot_id = line_data[uniprot_col_index]
+                                            if extra_data["uniprot_id_col"]:
+                                                uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
+                                                uniprot_id = line_data[uniprot_col_index]
                                         searched_data = []
                                         sample_annotation = SampleAnnotation.objects.filter(file=related).first()
                                         if sample_annotation:
@@ -523,31 +530,37 @@ class SearchSession(models.Model):
                         primary_id = ""
                         uniprot_id = ""
                         if "gene_name_col" in extra_data:
-                            gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
-                            gene_name = result["context"][gene_name_col_index]
+                            if extra_data["gene_name_col"]:
+                                gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
+                                gene_name = result["context"][gene_name_col_index]
                         if "primary_id_col" in extra_data:
-                            primary_id_col_index = column_headers_map[extra_data["primary_id_col"]]
-                            primary_id = result["context"][primary_id_col_index]
+                            if extra_data["primary_id_col"]:
+                                primary_id_col_index = column_headers_map[extra_data["primary_id_col"]]
+                                primary_id = result["context"][primary_id_col_index]
                         if "uniprot_id_col" in extra_data:
-                            uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
-                            uniprot_id = result["context"][uniprot_col_index]
+                            if extra_data["uniprot_id_col"]:
+                                uniprot_col_index = column_headers_map[extra_data["uniprot_id_col"]]
+                                uniprot_id = result["context"][uniprot_col_index]
                         search_result.gene_name = gene_name
                         search_result.primary_id = primary_id
                         search_result.uniprot_id = uniprot_id
 
                         if self.search_mode == "gene":
                             if "gene_name_col" in extra_data:
-                                if found_term in gene_name.lower():
-                                    yield search_result
+                                if gene_name:
+                                    if found_term in gene_name.lower():
+                                        yield search_result
 
                         elif self.search_mode == "uniprot":
                             if "uniprot_col" in extra_data:
-                                if found_term in uniprot_id.lower():
-                                    yield search_result
+                                if uniprot_id:
+                                    if found_term in uniprot_id.lower():
+                                        yield search_result
                         elif self.search_mode == "pi":
                             if "primary_id_col" in extra_data:
-                                if found_term in primary_id.lower():
-                                    yield search_result
+                                if primary_id:
+                                    if found_term in primary_id.lower():
+                                        yield search_result
                         else:
                             yield search_result
 
@@ -775,7 +788,7 @@ class CurtainData(models.Model):
         data = client.download_curtain_session(self.link_id)
         diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
         searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
-        media_folder = os.path.join(settings.MEDIA_ROOT, "chunked_uploads")
+        media_folder = os.path.join(settings.MEDIA_ROOT, "user_files")
         if not os.path.exists(media_folder):
             os.makedirs(media_folder)
         diff_file_path = os.path.join(media_folder, f"{uuid.uuid4().hex}.diff.txt")
@@ -838,15 +851,16 @@ class CurtainData(models.Model):
                 else:
                     splitted = s.split(".")
                     if len(splitted) > 1:
-                        annotations.append({"Sample": s, "Condition": splitted[0:len(splitted) - 1]})
+                        annotations.append({"Sample": s, "Condition": ".".join(splitted[0:len(splitted) - 1]) })
                     else:
                         annotations.append({"Sample": s, "Condition": s})
             else:
                 splitted = s.split(".")
                 if len(splitted) > 1:
-                    annotations.append({"Sample": s, "Condition": splitted[0:len(splitted)-1]})
+                    annotations.append({"Sample": s, "Condition": ".".join(splitted[0:len(splitted)-1])})
                 else:
                     annotations.append({"Sample": s, "Condition": s})
+
         SampleAnnotation.objects.create(
             name=f"{analysis_group.name} - Sample Annotations",
             analysis_group=analysis_group,

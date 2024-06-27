@@ -165,7 +165,8 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         analysis_group.description = request.data['description']
         if "curtain_link" in request.data:
             if analysis_group.curtain_link != request.data['curtain_link']:
-                load_curtain_data.delay(analysis_group.id, request.data['curtain_link'], request.data['session_id'])
+                #project_files = analysis_group.project_files.all()
+                #load_curtain_data.delay(analysis_group.id, request.data['curtain_link'], request.data['session_id'])
                 analysis_group.curtain_link = request.data['curtain_link']
         analysis_group.save()
         return Response(AnalysisGroupSerializer(analysis_group).data, status=status.HTTP_200_OK)
@@ -174,7 +175,11 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
     def refresh_curtain_data(self, request, pk=None):
         analysis_group = self.get_object()
         session_id = self.request.data['session_id']
-        load_curtain_data.delay(analysis_group.id, analysis_group.curtain_link, session_id)
+        project_files = analysis_group.project_files.all()
+        df_files = project_files.filter(file_category='df')
+        searched_files = project_files.filter(file_category='searched')
+        if df_files.exists() and searched_files.exists():
+            load_curtain_data.delay(analysis_group.id, analysis_group.curtain_link, session_id)
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])

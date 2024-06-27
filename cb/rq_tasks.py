@@ -85,14 +85,20 @@ def compose_analysis_group_from_curtain_data(analysis_group_id: int, curtain_lin
     if match:
         analysis_group.curtain_link = curtain_link
         analysis_group.curtain_data.all().delete()
-        project_files = analysis_group.project.project_files.filter(file_category__in=["searched", "df"])
+        project_files = analysis_group.project_files.filter(file_category__in=["searched", "df"])
         project_files.delete()
-        data = CurtainData.objects.create(analysis_group=analysis_group, host=settings.CURTAIN_HOST,
-                                          link_id=match.group(0))
+        curtain = analysis_group.curtain_data.all()
+        if curtain:
+            curtain.delete()
+        data = CurtainData.objects.create(
+            analysis_group=analysis_group,
+            host=settings.CURTAIN_HOST,
+            link_id=match.group(0)
+        )
         async_to_sync(channel_layer.group_send)(
             f"curtain_{session_id}", {
                 "type": "curtain_message", "message": {
-                    "type": "curtain_status",
+                    "type": "curtain_compose_status",
                     "status": "started",
                     "analysis_group_id": analysis_group.id
                 }})
@@ -101,7 +107,7 @@ def compose_analysis_group_from_curtain_data(analysis_group_id: int, curtain_lin
     async_to_sync(channel_layer.group_send)(
         f"curtain_{session_id}", {
             "type": "curtain_message", "message": {
-                "type": "curtain_status",
+                "type": "curtain_compose_status",
                 "status": "complete",
                 "analysis_group_id": analysis_group.id
             }})
