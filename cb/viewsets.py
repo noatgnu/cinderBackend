@@ -324,6 +324,28 @@ class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
             labels = data[column].unique()
         return Response(list(labels), status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['get'])
+    def request_download_token(self, request, pk=None):
+        file = self.get_object()
+        signer = TimestampSigner()
+        token = signer.sign(file.id)
+        return Response({"token":token}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def download(self, request):
+        token = request.query_params.get('token', None)
+        signer = TimestampSigner()
+        try:
+            file_id = signer.unsign(token, max_age=60*30)
+            file = ProjectFile.objects.get(id=file_id)
+            file_path = file.file.path.replace(str(settings.MEDIA_ROOT), "/media")
+            response = HttpResponse(status=200)
+            response["Content-Disposition"] = f'attachment; filename="{file.name}"'
+            response["X-Accel-Redirect"] = f"{file_path}"
+            return response
+        except Exception as e:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class ComparisonMatrixViewSet(viewsets.ModelViewSet, FilterMixin):
