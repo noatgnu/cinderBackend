@@ -49,8 +49,6 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
         query = Q()
         if species:
             query &= Q(species__id__in=species.split(","))
-
-
         return queryset.filter(query)
 
     def get_object(self):
@@ -530,6 +528,9 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
             search_session = SearchSession.objects.create(search_term=search_term, session_id=session_id)
         else:
             search_session = SearchSession.objects.create(search_term=search_term)
+        if 'species' in request.data:
+            species = Species.objects.get(id=request.data['species'])
+            search_session.species = species
         search_session.log2_fc = float(fc_cutoff)
         search_session.log10_p_value = float(p_value_cutoff)
         search_session.search_mode = search_mode

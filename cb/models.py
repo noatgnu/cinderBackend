@@ -303,6 +303,7 @@ class SearchSession(models.Model):
     ]
     search_mode = models.CharField(max_length=255, choices=search_mode_choices, default='full')
     failed = models.BooleanField(default=False)
+    species = models.ForeignKey("Species", on_delete=models.CASCADE, related_name="search_sessions", blank=True, null=True)
 
     class Meta:
         ordering = ['created_at']
@@ -313,6 +314,8 @@ class SearchSession(models.Model):
         self.in_progress = True
         self.save()
         analysis_groups = self.analysis_groups.all()
+        if self.species:
+            analysis_groups = analysis_groups.filter(project__species=self.species)
         if analysis_groups.exists():
             files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df"])
         else:
