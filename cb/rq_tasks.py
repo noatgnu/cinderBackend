@@ -75,7 +75,7 @@ def load_curtain_data(analysis_group_id: int, curtain_link: str, session_id: str
                     "status": "started",
                     "analysis_group_id": analysis_group.id
                 }})
-        data.get_curtain_data()
+        data.get_curtain_data(session_id)
         analysis_group.save()
     async_to_sync(channel_layer.group_send)(
         f"curtain_{session_id}", {
@@ -111,7 +111,7 @@ def compose_analysis_group_from_curtain_data(analysis_group_id: int, curtain_lin
                     "status": "started",
                     "analysis_group_id": analysis_group.id
                 }})
-        data.compose_analysis_group_from_curtain_data(analysis_group)
+        data.compose_analysis_group_from_curtain_data(analysis_group, session_id)
         analysis_group.save()
     async_to_sync(channel_layer.group_send)(
         f"curtain_{session_id}", {

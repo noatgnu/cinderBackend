@@ -759,7 +759,7 @@ class CurtainData(models.Model):
     def __repr__(self):
         return f"{self.link_id} - {self.host} - Created: {self.created_at}"
 
-    def parse_curtain_data(self, data: dict, diff_df: pd.DataFrame, primary_id_col: str, fold_change_col: str, p_value_col: str):
+    def parse_curtain_data(self, data: dict, diff_df: pd.DataFrame, primary_id_col: str, fold_change_col: str, p_value_col: str, comparison_col: str = None):
         curtain_data = CurtainUniprotData(data["extraData"]["uniprot"])
         def parse_data(row: pd.Series, curtain_data: CurtainUniprotData, primary_id_col: str):
             uniprot = curtain_data.get_uniprot_data_from_pi(row[primary_id_col])
@@ -770,8 +770,11 @@ class CurtainData(models.Model):
 
         diff_df = diff_df.apply(lambda x: parse_data(x, curtain_data, primary_id_col), axis=1)
         self.settings = json.dumps(data["settings"])
-        diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry"]]
-        diff_df.rename(columns={primary_id_col: "Primary ID", fold_change_col: "Fold Change", p_value_col: "P-value"},
+        diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry", comparison_col]]
+        columns_rename_dict = {primary_id_col: "Primary ID", fold_change_col: "Fold Change", p_value_col: "P-value"}
+        if comparison_col:
+            columns_rename_dict[comparison_col] = "Comparison"
+        diff_df.rename(columns=columns_rename_dict,
                        inplace=True)
         self.data = json.dumps(diff_df.to_json(orient="records"))
         self.annotations = json.dumps([data["annotatedData"][k] for k in data["annotatedData"]])
@@ -779,10 +782,30 @@ class CurtainData(models.Model):
         self.selection_map = json.dumps(data["selectionsMap"])
         self.save()
 
-    def get_curtain_data(self):
+    def get_curtain_data(self, session_id=None):
         client = CurtainClient(self.host)
+        channel_layer = get_channel_layer()
+        if session_id:
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "curtain_status",
+                        "status": "in_progress",
+                        "id": self.id,
+                        "message": "Downloading data from Curtain"
+                    }})
         data = client.download_curtain_session(self.link_id)
+        if session_id:
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "curtain_status",
+                        "status": "in_progress",
+                        "id": self.id,
+                        "message": "Parsing data from Curtain"
+                    }})
         differential_analysis_file = self.analysis_group.project_files.filter(file_category="df").first()
+
         if data["processed"]:
             diff_df = pd.read_csv(io.StringIO(data["processed"]), sep=None)
         else:
@@ -790,23 +813,44 @@ class CurtainData(models.Model):
         primary_id_col = data["differentialForm"]["_primaryIDs"]
         fold_change_col = data["differentialForm"]["_foldChange"]
         p_value_col = data["differentialForm"]["_significant"]
+        print(diff_df.shape)
         if data["differentialForm"]["_comparison"]:
             comparison_col = data["differentialForm"]["_comparison"]
             if data["differentialForm"]["_comparisonSelect"]:
                 comparison_label = data["differentialForm"]["_comparisonSelect"]
                 diff_df[comparison_col] = diff_df[comparison_col].astype(str)
                 diff_df = diff_df[diff_df[comparison_col].isin(comparison_label)]
+        print(diff_df.shape)
         if data["differentialForm"]["_transformFC"]:
             diff_df[fold_change_col] = np.log2(diff_df[fold_change_col])
         if data["differentialForm"]["_transformSignificant"]:
             diff_df[p_value_col] = -np.log10(diff_df[p_value_col])
         if data["differentialForm"]["_reverseFoldChange"]:
             diff_df[fold_change_col] = -diff_df[fold_change_col]
-        self.parse_curtain_data(data, diff_df, primary_id_col, fold_change_col, p_value_col)
+        self.parse_curtain_data(data, diff_df, primary_id_col, fold_change_col, p_value_col, data["differentialForm"]["_comparison"])
 
-    def compose_analysis_group_from_curtain_data(self, analysis_group: AnalysisGroup):
+    def compose_analysis_group_from_curtain_data(self, analysis_group: AnalysisGroup, session_id=None):
         client = CurtainClient(self.host)
+        channel_layer = get_channel_layer()
+        if session_id:
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "curtain_status",
+                        "status": "in_progress",
+                        "id": self.id,
+                        "message": "Downloading data from Curtain"
+                    }})
         data = client.download_curtain_session(self.link_id)
+        if session_id:
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "curtain_status",
+                        "status": "in_progress",
+                        "id": self.id,
+                        "message": "Parsing data from Curtain"
+                    }})
         diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
         searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
         media_folder = os.path.join(settings.MEDIA_ROOT, "user_files")
@@ -928,7 +972,25 @@ class CurtainData(models.Model):
                 file=diff_project_file,
                 matrix=json.dumps(matrix)
             )
-        self.parse_curtain_data(data, diff_file, data["differentialForm"]["_primaryIDs"], data["differentialForm"]["_foldChange"], data["differentialForm"]["_significant"])
+        if session_id:
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "curtain_status",
+                        "status": "in_progress",
+                        "id": self.id,
+                        "message": "Creating Analysis Group"
+                    }})
+        if data["differentialForm"]["_comparisonSelect"]:
+            comparison_label = data["differentialForm"]["_comparisonSelect"]
+            diff_file = diff_file[diff_file[data["differentialForm"]["_comparison"]].isin(comparison_label)]
+        self.parse_curtain_data(data,
+                                diff_file,
+                                data["differentialForm"]["_primaryIDs"],
+                                data["differentialForm"]["_foldChange"],
+                                data["differentialForm"]["_significant"],
+                                data["differentialForm"]["_comparison"]
+                                )
 
 
 
