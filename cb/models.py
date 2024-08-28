@@ -981,8 +981,9 @@ class CurtainData(models.Model):
                         "message": "Creating Analysis Group"
                     }})
         if data["differentialForm"]["_comparisonSelect"]:
-            comparison_label = data["differentialForm"]["_comparisonSelect"]
-            diff_file = diff_file[diff_file[data["differentialForm"]["_comparison"]].isin(comparison_label)]
+            if diff_file[data["differentialForm"]["_comparison"] != "CurtainSetComparison":
+                comparison_label = data["differentialForm"]["_comparisonSelect"]
+                diff_file = diff_file[diff_file[data["differentialForm"]["_comparison"]].isin(comparison_label)]
         self.parse_curtain_data(data,
                                 diff_file,
                                 data["differentialForm"]["_primaryIDs"],
