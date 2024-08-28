@@ -863,7 +863,8 @@ class CurtainData(models.Model):
             diff_file[data["differentialForm"]["_foldChange"]] = -diff_file[data["differentialForm"]["_foldChange"]]
         if data["differentialForm"]["_comparison"]:
             comparison_col = data["differentialForm"]["_comparison"]
-            diff_file[comparison_col] = diff_file[comparison_col].astype(str)
+            if comparison_col != "CurtainSetComparison":
+                diff_file[comparison_col] = diff_file[comparison_col].astype(str)
         diff_file.to_csv(diff_file_path, sep="\t", index=False)
         searched_file_path = os.path.join(media_folder, f"{uuid.uuid4().hex}.searched.txt")
         searched_file.to_csv(searched_file_path, sep="\t", index=False)
