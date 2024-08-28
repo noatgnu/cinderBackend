@@ -689,8 +689,6 @@ class SearchSession(models.Model):
             yield {"term": row[0].strip(), "row": int(row[1].strip()), "context": row[2]}
 
 
-
-
 class SearchResult(models.Model):
     """
     A model to store search results.
