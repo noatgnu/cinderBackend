@@ -768,7 +768,11 @@ class CurtainData(models.Model):
 
         diff_df = diff_df.apply(lambda x: parse_data(x, curtain_data, primary_id_col), axis=1)
         self.settings = json.dumps(data["settings"])
-        diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry", comparison_col]]
+        if comparison_col != "CurtainSetComparison":
+            diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry", comparison_col]]
+        else:
+            diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry"]]
+            diff_df[comparison_col] = "1"
         columns_rename_dict = {primary_id_col: "Primary ID", fold_change_col: "Fold Change", p_value_col: "P-value"}
         if comparison_col:
             columns_rename_dict[comparison_col] = "Comparison"
