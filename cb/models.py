@@ -331,7 +331,7 @@ class SearchSession(models.Model):
         results = []
 
         for f in files:
-
+            print(f.__dict__)
             if f.id not in term_headline_file_dict:
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
             term_contexts = f.get_search_items_from_headline()
