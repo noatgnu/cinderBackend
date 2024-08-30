@@ -370,7 +370,7 @@ class SearchSession(models.Model):
                         "current_progress": current_progress+1,
                     }})
             term_contexts = term_headline_file_dict[f]['term_contexts']
-
+            print(term_contexts)
             for result in self.extract_result(f, term_contexts, term_headline_file_dict):
                 if result.primary_id not in pi_list:
                     pi_list.append(result.primary_id)
