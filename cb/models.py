@@ -175,7 +175,7 @@ class ProjectFile(models.Model):
             print(self.headline)
             for match in re.finditer(pattern, self.headline):
                 if match:
-                    m = match.group(2)
+                    m = match.group(1)
                     if m not in term_contexts:
                         term_contexts[m] = []
                     start = match.start(0)
