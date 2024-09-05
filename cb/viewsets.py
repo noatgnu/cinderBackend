@@ -25,10 +25,10 @@ from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysi
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
-    SearchSession, Species, CurtainData, Abs
+    SearchSession, Species, CurtainData, Abs, Collate
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
-    SpeciesSerializer, CurtainDataSerializer
+    SpeciesSerializer, CurtainDataSerializer, CollateSerializers
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -643,3 +643,46 @@ class SpeciesViewSet(viewsets.ModelViewSet, FilterMixin):
 
 
 
+class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
+    serializer_class = CollateSerializers
+    queryset = Collate.objects.all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'title', 'created_at']
+    filterset_fields = ['title']
+    search_fields = ['title']
+    pagination_class = LimitOffsetPagination
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+    def create(self, request, *args, **kwargs):
+        collate = Collate.objects.create(
+            title=request.data['title'],
+            greeting=request.data['greeting'],
+        )
+        data = CollateSerializers(collate).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        collate = self.get_object()
+        collate.title = request.data['title']
+        collate.greeting = request.data['greeting']
+        if 'settings' in request.data:
+            collate.settings = request.data['settings']
+        if 'projects' in request.data:
+            project_ids = [i["id"] for i in request.data['projects']]
+            projects = Project.objects.filter(id__in=project_ids)
+            # remove all projects
+            collate.projects.clear()
+            # add new projects
+            collate.projects.add(*projects)
+        collate.save()
+        return Response(CollateSerializers(collate).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        collate = self.get_object()
+        collate.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

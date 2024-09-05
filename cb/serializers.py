@@ -3,7 +3,7 @@ import json
 from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
-    SearchSession, Species, CurtainData
+    SearchSession, Species, CurtainData, Collate
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -114,3 +114,17 @@ class CurtainDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = CurtainData
         fields = ['id', 'data', 'settings', 'host', 'link_id', 'analysis_group', 'created_at', 'updated_at', 'annotations', 'selections', 'selection_map']
+
+class CollateSerializers(serializers.ModelSerializer):
+    projects = serializers.SerializerMethodField()
+
+    def get_projects(self, collate):
+        projects = collate.projects.all()
+        if projects:
+            return ProjectSerializer(projects, many=True).data
+        else:
+            return []
+
+    class Meta:
+        model = Collate
+        fields = ['id', 'title', 'greeting', 'projects', 'created_at', 'updated_at', 'settings']

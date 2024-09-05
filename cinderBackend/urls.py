@@ -21,7 +21,7 @@ from rest_framework.authtoken.views import obtain_auth_token
 
 from cb.views import DataChunkedUploadView, LogoutView
 from cb.viewsets import ProjectViewSet, ProjectFileViewSet, AnalysisGroupViewSet, SampleAnnotationViewSet, \
-    ComparisonMatrixViewSet, SearchResultViewSet, SearchSessionViewSet, SpeciesViewSet
+    ComparisonMatrixViewSet, SearchResultViewSet, SearchSessionViewSet, SpeciesViewSet, CollateViewSet
 
 router = routers.DefaultRouter()
 router.register(r'projects', ProjectViewSet)
@@ -32,6 +32,7 @@ router.register(r"comparison_matrices", ComparisonMatrixViewSet)
 router.register(r"search", SearchSessionViewSet)
 router.register(r"search_results", SearchResultViewSet)
 router.register(r"species", SpeciesViewSet)
+router.register(r"collates", CollateViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

@@ -14,7 +14,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from curtainutils.client import CurtainClient, CurtainUniprotData
 from django.contrib.postgres.indexes import GinIndex
-from django.contrib.postgres.search import SearchVectorField, SearchHeadline, SearchVector
+from django.contrib.postgres.search import SearchVectorField, SearchHeadline, SearchVector, SearchQuery
 from django.db import models
 from django.db.models import Func
 from django.db.models.signals import post_save
@@ -172,7 +172,6 @@ class ProjectFile(models.Model):
             #pattern = '(?<!\S)(?<!-|\w)(;)*<b>(.*?)</b>'
             pattern = r'<b>(.*?)</b>'
             term_contexts = {}
-            print(self.headline)
             for match in re.finditer(pattern, self.headline):
                 if match:
                     m = match.group(1)
@@ -316,23 +315,27 @@ class SearchSession(models.Model):
         self.in_progress = True
         self.save()
         analysis_groups = self.analysis_groups.all()
+        print(analysis_groups)
         if self.species:
             analysis_groups = analysis_groups.filter(project__species=self.species)
         if analysis_groups.exists():
             files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df"])
         else:
             files = ProjectFile.objects.filter(file_category__in=["df"])
+        print(files)
+        search_query = SearchQuery(self.search_term, search_type='websearch')
         files = files.filter(
-            file_contents__search_vector=self.search_term
+            file_contents__search_vector=search_query
         ).annotate(
             headline=SearchHeadline(
-                'file_contents__content', self.search_term, start_sel="<b>", stop_sel="</b>", highlight_all=True)
+                'file_contents__content', search_query, start_sel="<b>", stop_sel="</b>", highlight_all=True)
         ).distinct()
         term_headline_file_dict = {}
         found_terms = []
         results = []
-
+        print(files)
         for f in files:
+            print(f)
             if f.id not in term_headline_file_dict:
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
             term_contexts = f.get_search_items_from_headline()
@@ -371,8 +374,8 @@ class SearchSession(models.Model):
                         "current_progress": current_progress+1,
                     }})
             term_contexts = term_headline_file_dict[f]['term_contexts']
-            print(term_contexts)
             for result in self.extract_result(f, term_contexts, term_headline_file_dict):
+                print("result", result)
                 if result.primary_id not in pi_list:
                     pi_list.append(result.primary_id)
                 if result.primary_id not in primary_id_analysis_group_result_map:
@@ -557,7 +560,7 @@ class SearchSession(models.Model):
                         search_result.gene_name = gene_name
                         search_result.primary_id = primary_id
                         search_result.uniprot_id = uniprot_id
-
+                        print(search_result)
                         if self.search_mode == "gene":
                             if "gene_name_col" in extra_data:
                                 if gene_name:
@@ -581,11 +584,15 @@ class SearchSession(models.Model):
     def extract_result_data(self, column_headers_map, file, found_term, result):
         # print(file.file_category)
         if file.file_category == "df":
+            print(file)
+            print(ComparisonMatrix.objects.filter(file=file))
             comparison_matrix = ComparisonMatrix.objects.filter(file=file).first()
             if comparison_matrix:
+                print("comparison")
                 if comparison_matrix.matrix:
                     matrix = json.loads(comparison_matrix.matrix)
-                    # print(matrix)
+
+                    print(matrix)
                     for m in matrix:
                         # print(result["context"])
                         log2_fc = None
@@ -622,6 +629,8 @@ class SearchSession(models.Model):
                                 if sr.comparison_label:
                                     if len(sr.comparison_label) > 0:
                                         yield sr
+            else:
+                print("no comparison matrix")
         else:
             sr = SearchResult(
                 search_term=found_term,
@@ -633,7 +642,7 @@ class SearchSession(models.Model):
             if sample_annotation:
                 annotation = json.loads(sample_annotation.annotations)
                 searched_data = []
-                #print(annotation)
+                print(annotation)
                 for a in annotation:
                     #print(result["context"])
 
@@ -998,7 +1007,20 @@ class CurtainData(models.Model):
                                 )
 
 
+class Collate(models.Model):
+    """
+    A model to store digital poster collate.
+    """
+    title = models.TextField(blank=True, null=True)
+    greeting = models.TextField(blank=True, null=True)
+    projects = models.ManyToManyField(Project, related_name='collates', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    settings = models.JSONField(blank=True, null=True)
 
+    class Meta:
+        ordering = ['created_at']
+        app_label = 'cb'
 
 
 
