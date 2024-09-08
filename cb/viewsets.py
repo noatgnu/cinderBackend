@@ -84,6 +84,25 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
         count = Project.objects.count()
         return Response({"count": count}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['get'])
+    def get_unique_conditions(self, request, pk=None):
+        project = self.get_object()
+        analysis_group = AnalysisGroup.objects.filter(project=project)
+        conditions = []
+        analysis_group_map = {}
+        for i in analysis_group:
+            analysis_group_map[i.id] = AnalysisGroupSerializer(i).data
+            for f in i.project_files.all():
+                for s in f.sample_annotations.all():
+                    if s.annotations:
+                        annotations = json.loads(s.annotations)
+                        for a in annotations:
+                            data = (a["Condition"], i.id)
+                            if data not in conditions:
+                                conditions.append(data)
+
+        return Response([ {"Condition": i[0], "AnalysisGroup": analysis_group_map[i[1]]} for i in conditions], status=status.HTTP_200_OK)
+
     # @action(detail=False, methods=['post'])
     # def search(self, request):
     #     query = SearchQuery(request.data['query'], search_type="websearch")
