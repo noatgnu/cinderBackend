@@ -863,8 +863,17 @@ class CurtainData(models.Model):
                         "id": self.id,
                         "message": "Parsing data from Curtain"
                     }})
+
         diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
-        searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
+        sniffer = csv.Sniffer()
+        sample = data["raw"][:1024]
+        dialect = sniffer.sniff(sample)
+        searched_file = pd.read_csv(
+            io.StringIO(data["raw"]),
+            sep=dialect.delimiter,
+            quotechar=dialect.quotechar
+        )
+
         media_folder = os.path.join(settings.MEDIA_ROOT, "user_files")
         if not os.path.exists(media_folder):
             os.makedirs(media_folder)
