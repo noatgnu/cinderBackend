@@ -25,10 +25,10 @@ from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysi
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
-    SearchSession, Species, CurtainData, Abs, Collate
+    SearchSession, Species, CurtainData, Abs, Collate, CollateTag
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
-    SpeciesSerializer, CurtainDataSerializer, CollateSerializers
+    SpeciesSerializer, CurtainDataSerializer, CollateSerializers, CollateTagSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -705,3 +705,75 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
         collate = self.get_object()
         collate.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def add_tags(self, request, pk=None):
+        collate = self.get_object()
+        tags = request.data['tags']
+        tags = CollateTag.objects.filter(id__in=tags)
+        for tag in tags:
+            collate.tags.add(tag)
+        collate.save()
+        return Response(CollateSerializers(collate).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def remove_tags(self, request, pk=None):
+        collate = self.get_object()
+        tags = request.data['tags']
+        tags = CollateTag.objects.filter(id__in=tags)
+        for tag in tags:
+            collate.tags.remove(tag)
+        collate.save()
+        return Response(CollateSerializers(collate).data, status=status.HTTP_200_OK)
+
+
+class CollateTagViewSet(viewsets.ModelViewSet, FilterMixin):
+    serializer_class = CollateTagSerializer
+    queryset = CollateTag.objects.all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'name', 'created_at']
+    filterset_fields = ['name']
+    search_fields = ['name']
+    pagination_class = LimitOffsetPagination
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+    def create(self, request, *args, **kwargs):
+        tag = CollateTag.objects.create(
+            name=request.data['name'],
+        )
+        data = CollateTagSerializer(tag).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        tag = self.get_object()
+        tag.name = request.data['name']
+        tag.save()
+        return Response(CollateTagSerializer(tag).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        tag = self.get_object()
+        tag.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def add_to_collate(self, request, pk=None):
+        tag = self.get_object()
+        collate_id = self.request.data['collate']
+        collate = Collate.objects.get(id=collate_id)
+        collate.tags.add(tag)
+        collate.save()
+        return Response(CollateTagSerializer(tag).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def remove_from_collate(self, request, pk=None):
+        tag = self.get_object()
+        collate_id = self.request.data['collate']
+        collate = Collate.objects.get(id=collate_id)
+        collate.tags.remove(tag)
+        collate.save()
+        return Response(status=status.HTTP_200_OK)

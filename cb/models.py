@@ -1032,6 +1032,20 @@ class Collate(models.Model):
         app_label = 'cb'
 
 
+class CollateTag(models.Model):
+    """
+    A model to store digital poster collate tags.
+    """
+    name = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    collates = models.ManyToManyField(Collate, related_name='tags', blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+        app_label = 'cb'
+
+
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):
