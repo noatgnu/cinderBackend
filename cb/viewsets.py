@@ -675,7 +675,12 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
     pagination_class = LimitOffsetPagination
 
     def get_queryset(self):
-        return super().get_queryset()
+        tag_ids = self.request.query_params.get('tag_ids', None)
+        query = Q()
+        if tag_ids:
+            tags = CollateTag.objects.filter(id__in=tag_ids.split(","))
+            query &= Q(tags__in=tags)
+        return self.queryset.filter(query).distinct()
 
     def create(self, request, *args, **kwargs):
         collate = Collate.objects.create(
