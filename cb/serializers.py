@@ -1,9 +1,10 @@
 import json
 
+from django.conf import settings
 from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
-    SearchSession, Species, CurtainData, Collate, CollateTag
+    SearchSession, Species, CurtainData, Collate, CollateTag, LabGroup
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -142,3 +143,20 @@ class CollateTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = CollateTag
         fields = ['id', 'name', 'created_at', 'updated_at']
+
+class UserSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = settings.AUTH_USER_MODEL
+        fields = ['id', 'username', 'is_staff']
+
+class LabGroupSerializer(serializers.ModelSerializer):
+    managers = serializers.SerializerMethodField()
+
+    def get_managers(self, lab_group):
+        return [user.id for user in lab_group.managing_members.all()]
+
+    class Meta:
+        model = LabGroup
+        fields = ['id', 'name', 'created_at', 'updated_at', 'managers']
+

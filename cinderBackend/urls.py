@@ -19,10 +19,11 @@ from django.urls import path, include
 from rest_framework import routers
 from rest_framework.authtoken.views import obtain_auth_token
 
+from cb.models import LabGroup
 from cb.views import DataChunkedUploadView, LogoutView
 from cb.viewsets import ProjectViewSet, ProjectFileViewSet, AnalysisGroupViewSet, SampleAnnotationViewSet, \
     ComparisonMatrixViewSet, SearchResultViewSet, SearchSessionViewSet, SpeciesViewSet, CollateViewSet, \
-    CollateTagViewSet
+    CollateTagViewSet, UserViewSet, LabGroupViewSet
 
 router = routers.DefaultRouter()
 router.register(r'projects', ProjectViewSet)
@@ -35,6 +36,8 @@ router.register(r"search_results", SearchResultViewSet)
 router.register(r"species", SpeciesViewSet)
 router.register(r"collates", CollateViewSet)
 router.register(r"collate_tags", CollateTagViewSet)
+router.register(r"users", UserViewSet)
+router.register(r"lab_groups", LabGroupViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

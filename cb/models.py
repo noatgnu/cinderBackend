@@ -1049,6 +1049,20 @@ class CollateTag(models.Model):
         app_label = 'cb'
 
 
+class LabGroup(models.Model):
+    """
+    A model to store lab groups.
+    """
+    name = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='lab_groups', blank=True)
+    managing_members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='managing_lab_groups', blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+        app_label = 'cb'
+
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):

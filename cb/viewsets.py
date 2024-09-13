@@ -12,7 +12,7 @@ from django.http import HttpResponse
 from django_filters import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters.views import FilterMixin
-from drf_chunked_upload.models import ChunkedUpload
+from drf_chunked_upload.models import ChunkedUpload, AUTH_USER_MODEL
 from rest_framework import viewsets, permissions, status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import action
@@ -25,10 +25,11 @@ from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysi
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
-    SearchSession, Species, CurtainData, Abs, Collate, CollateTag
+    SearchSession, Species, CurtainData, Abs, Collate, CollateTag, LabGroup
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
-    SpeciesSerializer, CurtainDataSerializer, CollateSerializers, CollateTagSerializer
+    SpeciesSerializer, CurtainDataSerializer, CollateSerializers, CollateTagSerializer, UserSerializer, \
+    LabGroupSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -782,3 +783,93 @@ class CollateTagViewSet(viewsets.ModelViewSet, FilterMixin):
         collate.tags.remove(tag)
         collate.save()
         return Response(status=status.HTTP_200_OK)
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    serializer_class = UserSerializer
+    queryset = AUTH_USER_MODEL.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+        AUTH_USER_MODEL.create_user(request.data['username'], request.data['email'], request.data['password'])
+        return Response(status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        object = self.get_object()
+        if request.user == object:
+            if 'email' in request.data:
+                object.email = request.data['email']
+            if 'password' in request.data:
+                object.set_password(request.data['password'])
+            object.save()
+            return Response(UserSerializer(object).data, status=status.HTTP_200_OK)
+        return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+    def destroy(self, request, *args, **kwargs):
+        return Response({'detail': 'Method not allowed.'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+class LabGroupViewSet(viewsets.ModelViewSet):
+    serializer_class = LabGroupSerializer
+    queryset = LabGroup.objects.all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'name', 'created_at']
+    filterset_fields = ['name']
+    search_fields = ['name']
+    pagination_class = LimitOffsetPagination
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        query = Q()
+        name = self.request.query_params.get('name', None)
+        if name:
+            query &= Q(name__icontains=name)
+        return queryset.filter(query)
+
+    def create(self, request, *args, **kwargs):
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        name = request.data['name']
+        lab_group = LabGroup.objects.create(name=name)
+        data = LabGroupSerializer(lab_group).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        if not self.request.user.is_staff or not self.request.user in self.get_object().managing_members.all():
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        lab_group = self.get_object()
+        if 'name' in request.data:
+            lab_group.name = request.data['name']
+        lab_group.save()
+        return Response(LabGroupSerializer(lab_group).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        lab_group = self.get_object()
+        lab_group.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def add_member(self, request, pk=None):
+        if not self.request.user.is_staff or not self.request.user in self.get_object().managing_members.all():
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        lab_group = self.get_object()
+        user_id = request.data['user']
+        user = AUTH_USER_MODEL.objects.get(id=user_id)
+        lab_group.members.add(user)
+        lab_group.save()
+        return Response(LabGroupSerializer(lab_group).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def remove_member(self, request, pk=None):
+        if not self.request.user.is_staff or not self.request.user in self.get_object().managing_members.all():
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        lab_group = self.get_object()
+        user_id = request.data['user']
+        user = AUTH_USER_MODEL.objects.get(id=user_id)
+        lab_group.members.remove(user)
+        lab_group.save()
+        return Response(LabGroupSerializer(lab_group).data, status=status.HTTP_200_OK)
