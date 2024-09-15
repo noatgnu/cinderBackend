@@ -1,6 +1,7 @@
 import json
 
 from django.conf import settings
+from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
@@ -147,7 +148,7 @@ class CollateTagSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
-        model = settings.AUTH_USER_MODEL
+        model = User
         fields = ['id', 'username', 'is_staff']
 
 class LabGroupSerializer(serializers.ModelSerializer):

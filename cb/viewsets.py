@@ -9,6 +9,7 @@ from django.contrib.postgres.search import SearchQuery, SearchHeadline
 from django.core.signing import TimestampSigner
 from django.db.models import Q
 from django.http import HttpResponse
+from django.contrib.auth.models import User
 from django_filters import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters.views import FilterMixin
@@ -47,9 +48,14 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
     def get_queryset(self):
         queryset = super().get_queryset()
         species = self.request.query_params.get('species', None)
+        lab_group = self.request.query_params.get('lab_group', None)
         query = Q()
         if species:
             query &= Q(species__id__in=species.split(","))
+        if lab_group:
+
+            query &= Q(user__lab_groups__id=lab_group)
+
         return queryset.filter(query)
 
     def get_object(self):
@@ -82,7 +88,11 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
     def get_count(self, request):
-        count = Project.objects.count()
+        lab_group = request.query_params.get('lab_group', None)
+        if lab_group:
+            count = Project.objects.filter(user__lab_groups__id=lab_group).count()
+        else:
+            count = Project.objects.count()
         return Response({"count": count}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'])
@@ -158,11 +168,14 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         queryset = super().get_queryset()
         query = Q()
         project = self.request.query_params.get('project', None)
+        lab_group = self.request.query_params.get('lab_group', None)
         if project:
             query &= Q(project__id=project)
         analysis_group_type = self.request.query_params.get('analysis_group_type', None)
         if analysis_group_type:
             query &= Q(analysis_group_type__in=analysis_group_type.split(","))
+        if lab_group:
+            query &= Q(project__user__lab_groups__id=lab_group)
         return queryset.filter(query)
 
     def create(self, request, *args, **kwargs):
@@ -224,7 +237,11 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
     def get_count(self, request):
-        count = AnalysisGroup.objects.count()
+        lab_group = request.query_params.get('lab_group', None)
+        if lab_group:
+            count = AnalysisGroup.objects.filter(project__user__lab_groups__id=lab_group).count()
+        else:
+            count = AnalysisGroup.objects.count()
         return Response({"count": count}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'])
@@ -787,13 +804,13 @@ class CollateTagViewSet(viewsets.ModelViewSet, FilterMixin):
 
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
-    queryset = AUTH_USER_MODEL.objects.all()
+    queryset = User.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
         if not request.user.is_staff:
             return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
-        AUTH_USER_MODEL.create_user(request.data['username'], request.data['email'], request.data['password'])
+        User.objects.create_user(request.data['username'], request.data['email'], request.data['password'])
         return Response(status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
@@ -809,6 +826,10 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         return Response({'detail': 'Method not allowed.'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    @action(detail=False, methods=['get'])
+    def get_current_user(self, request):
+        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
 class LabGroupViewSet(viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer
@@ -858,7 +879,7 @@ class LabGroupViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         lab_group = self.get_object()
         user_id = request.data['user']
-        user = AUTH_USER_MODEL.objects.get(id=user_id)
+        user = User.objects.get(id=user_id)
         lab_group.members.add(user)
         lab_group.save()
         return Response(LabGroupSerializer(lab_group).data, status=status.HTTP_200_OK)
@@ -869,7 +890,7 @@ class LabGroupViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         lab_group = self.get_object()
         user_id = request.data['user']
-        user = AUTH_USER_MODEL.objects.get(id=user_id)
+        user = User.objects.get(id=user_id)
         lab_group.members.remove(user)
         lab_group.save()
         return Response(LabGroupSerializer(lab_group).data, status=status.HTTP_200_OK)
