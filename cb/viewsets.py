@@ -806,11 +806,15 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     queryset = User.objects.all()
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'first_name', 'last_name', 'created_at']
+    filterset_fields = ['first_name', 'last_name']
+    search_fields = ['first_name', 'last_name']
 
     def create(self, request, *args, **kwargs):
         if not request.user.is_staff:
             return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
-        User.objects.create_user(request.data['username'], request.data['email'], request.data['password'])
+        User.objects.create_user(request.data['username'], request.data['email'], request.data['password'], request.data['first_name'], request.data['last_name'])
         return Response(status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
@@ -820,6 +824,10 @@ class UserViewSet(viewsets.ModelViewSet):
                 object.email = request.data['email']
             if 'password' in request.data:
                 object.set_password(request.data['password'])
+            if 'first_name' in request.data:
+                object.first_name = request.data['first_name']
+            if 'last_name' in request.data:
+                object.last_name = request.data['last_name']
             object.save()
             return Response(UserSerializer(object).data, status=status.HTTP_200_OK)
         return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)

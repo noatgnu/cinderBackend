@@ -149,7 +149,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'is_staff']
+        fields = ['id', 'username', 'is_staff', 'first_name', 'last_name', 'email']
 
 class LabGroupSerializer(serializers.ModelSerializer):
     managers = serializers.SerializerMethodField()
