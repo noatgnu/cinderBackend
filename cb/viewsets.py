@@ -868,7 +868,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name)
                 user.set_password(password)
                 if 'lab_group' in request.data:
-                    lab_group = LabGroup.objects.get(id=request.data['lab_group'])
+                    lab_group = LabGroup.objects.get(id__in=request.data['lab_group'])
                     user.lab_groups.add(lab_group)
                 user.save()
                 return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
