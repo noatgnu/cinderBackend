@@ -3,10 +3,11 @@ import json
 import os
 import re
 import uuid
+from crypt import methods
 
 import pandas as pd
 from django.contrib.postgres.search import SearchQuery, SearchHeadline
-from django.core.signing import TimestampSigner
+from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.db.models import Q
 from django.http import HttpResponse
 from django.contrib.auth.models import User
@@ -837,7 +838,57 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def get_current_user(self, request):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_403_FORBIDDEN)
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def get_user_lab_group(self, request):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        user = request.user
+        lab_groups = user.lab_groups.all()
+        data = LabGroupSerializer(lab_groups, many=True).data
+        return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
+    def create_with_token(self, request):
+        token = request.data['token']
+        username = request.data['username']
+        email = request.data['email']
+        first_name = request.data['first_name']
+        last_name = request.data['last_name']
+        password = request.data['password']
+        signer = TimestampSigner()
+        try:
+            token_data = signer.unsign(token, max_age=3600*24*7)
+            if token_data == username:
+                if User.objects.filter(username=username).exists():
+                    return Response({'detail': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+                user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name)
+                user.set_password(password)
+                if 'lab_group' in request.data:
+                    lab_group = LabGroup.objects.get(id=request.data['lab_group'])
+                    user.lab_groups.add(lab_group)
+                user.save()
+                return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+            else:
+                return Response({"detail": "Invalid token."}, status=status.HTTP_400_BAD_REQUEST)
+        except SignatureExpired:
+            return Response({'detail': 'Token has expired.'},status=status.HTTP_400_BAD_REQUEST)
+        except BadSignature:
+            return Response({'detail': 'Invalid token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+    @action(detail=False, methods=['post'])
+    def generate_token(self, request):
+        if not request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        signer = TimestampSigner()
+        token = signer.sign(request.data['username'])
+        if User.objects.filter(username=request.data['username']).exists():
+            return Response({'detail': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"token": token}, status=status.HTTP_200_OK)
 
 class LabGroupViewSet(viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer
@@ -883,8 +934,9 @@ class LabGroupViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def add_member(self, request, pk=None):
-        if not self.request.user.is_staff or not self.request.user in self.get_object().managing_members.all():
-            return Response(status=status.HTTP_403_FORBIDDEN)
+        if not self.request.user.is_staff:
+            if not self.request.user in self.get_object().managing_members.all():
+                return Response(status=status.HTTP_403_FORBIDDEN)
         lab_group = self.get_object()
         user_id = request.data['user']
         user = User.objects.get(id=user_id)
@@ -894,8 +946,10 @@ class LabGroupViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def remove_member(self, request, pk=None):
-        if not self.request.user.is_staff or not self.request.user in self.get_object().managing_members.all():
-            return Response(status=status.HTTP_403_FORBIDDEN)
+        if not self.request.user.is_staff:
+            if not self.request.user in self.get_object().managing_members.all():
+                return Response(status=status.HTTP_403_FORBIDDEN)
+
         lab_group = self.get_object()
         user_id = request.data['user']
         user = User.objects.get(id=user_id)
