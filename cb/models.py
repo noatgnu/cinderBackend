@@ -819,7 +819,17 @@ class CurtainData(models.Model):
         differential_analysis_file = self.analysis_group.project_files.filter(file_category="df").first()
 
         if data["processed"]:
-            diff_df = pd.read_csv(io.StringIO(data["processed"]), sep=None)
+            try:
+                sniffer = csv.Sniffer()
+                sample = data["processed"][:1024]
+                dialect = sniffer.sniff(sample)
+                diff_df = pd.read_csv(
+                    io.StringIO(data["processed"]),
+                    sep=dialect.delimiter,
+                    quotechar=dialect.quotechar
+                )
+            except pd.errors.ParserError:
+                diff_df = pd.read_csv(io.StringIO(data["processed"]), sep=None)
         else:
             diff_df = pd.read_csv(differential_analysis_file.file.path, sep=differential_analysis_file.get_delimiter())
         primary_id_col = data["differentialForm"]["_primaryIDs"]
@@ -864,7 +874,17 @@ class CurtainData(models.Model):
                         "message": "Parsing data from Curtain"
                     }})
 
-        diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
+        try:
+            sniffer = csv.Sniffer()
+            sample = data["processed"][:1024]
+            dialect = sniffer.sniff(sample)
+            diff_file = pd.read_csv(
+                io.StringIO(data["processed"]),
+                sep=dialect.delimiter,
+                quotechar=dialect.quotechar
+            )
+        except pd.errors.ParserError:
+            diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
         try:
             sniffer = csv.Sniffer()
             sample = data["raw"][:1024]
@@ -1028,6 +1048,7 @@ class Collate(models.Model):
     projects = models.ManyToManyField(Project, related_name='collates', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='collates', blank=True)
     settings = models.JSONField(blank=True, null=True)
 
     class Meta:

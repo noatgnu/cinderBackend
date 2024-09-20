@@ -1,9 +1,6 @@
 import csv
 import json
-import os
-import re
 import uuid
-from crypt import methods
 
 import pandas as pd
 from django.contrib.postgres.search import SearchQuery, SearchHeadline
@@ -114,6 +111,18 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
                                 conditions.append(data)
 
         return Response([ {"Condition": i[0], "AnalysisGroup": analysis_group_map[i[1]]} for i in conditions], status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def permissions(self, request, pk=None):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if request.user.is_staff:
+            return Response({"edit": True}, status=status.HTTP_200_OK)
+        project = self.get_object()
+        if project.user == request.user:
+            return Response({"edit": True}, status=status.HTTP_200_OK)
+        else:
+            return Response({"edit": False}, status=status.HTTP_200_OK)
 
     # @action(detail=False, methods=['post'])
     # def search(self, request):
@@ -253,6 +262,18 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
             return Response(status=status.HTTP_404_NOT_FOUND)
         data = CurtainDataSerializer(data.first()).data
         return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def permissions(self, request, pk=None):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if request.user.is_staff:
+            return Response({"edit": True}, status=status.HTTP_200_OK)
+        analysis_group = self.get_object()
+        if analysis_group.project.user == request.user:
+            return Response({"edit": True}, status=status.HTTP_200_OK)
+        else:
+            return Response({"edit": False}, status=status.HTTP_200_OK)
 
 
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -702,10 +723,13 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
         return self.queryset.filter(query).distinct()
 
     def create(self, request, *args, **kwargs):
+        user = request.user
         collate = Collate.objects.create(
             title=request.data['title'],
             greeting=request.data['greeting'],
         )
+        collate.users.add(user)
+        collate.save()
         data = CollateSerializers(collate).data
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -749,6 +773,18 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
             collate.tags.remove(tag)
         collate.save()
         return Response(CollateSerializers(collate).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def permissions(self, request, pk=None):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if request.user.is_staff:
+            return Response({"edit": True}, status=status.HTTP_200_OK)
+        collate = self.get_object()
+        if request.user in collate.users.all():
+            return Response({"edit": True}, status=status.HTTP_200_OK)
+        else:
+            return Response({"edit": False}, status=status.HTTP_200_OK)
 
 
 class CollateTagViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -868,8 +904,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name)
                 user.set_password(password)
                 if 'lab_group' in request.data:
-                    lab_group = LabGroup.objects.get(id__in=request.data['lab_group'])
-                    user.lab_groups.add(lab_group)
+                    lab_groups = LabGroup.objects.get(id__in=request.data['lab_group'])
+                    user.lab_groups.add(*lab_groups)
+
                 user.save()
                 return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
             else:
