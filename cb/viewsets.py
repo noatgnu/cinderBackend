@@ -1,6 +1,7 @@
 import csv
 import json
 import uuid
+from idlelib.query import Query
 
 import pandas as pd
 from django.contrib.postgres.search import SearchQuery, SearchHeadline
@@ -47,13 +48,14 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
         queryset = super().get_queryset()
         species = self.request.query_params.get('species', None)
         lab_group = self.request.query_params.get('lab_group', None)
+        users = self.request.query_params.get('users', None)
         query = Q()
         if species:
             query &= Q(species__id__in=species.split(","))
         if lab_group:
-
-            query &= Q(user__lab_groups__id=lab_group)
-
+            query &= Q(user__lab_groups__id__in=lab_group.split(","))
+        if users:
+            query &= Q(user__id__in=users.split(","))
         return queryset.filter(query)
 
     def get_object(self):
@@ -179,13 +181,16 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         query = Q()
         project = self.request.query_params.get('project', None)
         lab_group = self.request.query_params.get('lab_group', None)
+        users = self.request.query_params.get('users', None)
         if project:
             query &= Q(project__id=project)
         analysis_group_type = self.request.query_params.get('analysis_group_type', None)
         if analysis_group_type:
             query &= Q(analysis_group_type__in=analysis_group_type.split(","))
         if lab_group:
-            query &= Q(project__user__lab_groups__id=lab_group)
+            query &= Q(project__user__lab_groups__id__in=lab_group.split(","))
+        if users:
+            query &= Q(project__user__id__in=users.split(","))
         return queryset.filter(query)
 
     def create(self, request, *args, **kwargs):
@@ -717,13 +722,17 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
     def get_queryset(self):
         tag_ids = self.request.query_params.get('tag_ids', None)
         lab_group = self.request.query_params.get('lab_group', None)
+        users = self.request.query_params.get('users', None)
         query = Q()
         if tag_ids:
             tags = CollateTag.objects.filter(id__in=tag_ids.split(","))
             query &= Q(tags__in=tags)
 
         if lab_group:
-            query &= Q(users__lab_groups__id=lab_group)
+            query &= Q(users__lab_groups__id__in=lab_group.split(","))
+
+        if users:
+            query &= Q(users__id__in=users.split(","))
 
 
         return self.queryset.filter(query).distinct()
@@ -854,6 +863,13 @@ class UserViewSet(viewsets.ModelViewSet):
     filterset_fields = ['first_name', 'last_name']
     search_fields = ['first_name', 'last_name', 'username', 'email']
     pagination_class = LimitOffsetPagination
+
+    def get_queryset(self):
+        query = Q()
+        lab_group = self.request.query_params.get('lab_group', None)
+        if lab_group:
+            query &= Q(lab_groups__id__in=lab_group.split(","))
+        return self.queryset.filter(query)
 
     def create(self, request, *args, **kwargs):
         if not request.user.is_staff:
