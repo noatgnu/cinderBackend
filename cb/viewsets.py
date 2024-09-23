@@ -716,10 +716,16 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
 
     def get_queryset(self):
         tag_ids = self.request.query_params.get('tag_ids', None)
+        lab_group = self.request.query_params.get('lab_group', None)
         query = Q()
         if tag_ids:
             tags = CollateTag.objects.filter(id__in=tag_ids.split(","))
             query &= Q(tags__in=tags)
+
+        if lab_group:
+            query &= Q(users__lab_groups__id=lab_group)
+
+
         return self.queryset.filter(query).distinct()
 
     def create(self, request, *args, **kwargs):
@@ -846,7 +852,8 @@ class UserViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'first_name', 'last_name', 'created_at']
     filterset_fields = ['first_name', 'last_name']
-    search_fields = ['first_name', 'last_name']
+    search_fields = ['first_name', 'last_name', 'username', 'email']
+    pagination_class = LimitOffsetPagination
 
     def create(self, request, *args, **kwargs):
         if not request.user.is_staff:
@@ -856,7 +863,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         object = self.get_object()
-        if request.user == object:
+        if request.user == object or request.user.is_staff:
             if 'email' in request.data:
                 object.email = request.data['email']
             if 'password' in request.data:
@@ -865,6 +872,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 object.first_name = request.data['first_name']
             if 'last_name' in request.data:
                 object.last_name = request.data['last_name']
+            if 'username' in request.data:
+                if request.user.is_staff:
+                    object.username = request.data['username']
             object.save()
             return Response(UserSerializer(object).data, status=status.HTTP_200_OK)
         return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
