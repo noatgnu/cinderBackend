@@ -120,6 +120,7 @@ class CurtainDataSerializer(serializers.ModelSerializer):
 class CollateSerializers(serializers.ModelSerializer):
     projects = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
+    users = serializers.SerializerMethodField()
 
     def get_projects(self, collate):
         projects = collate.projects.all()
@@ -135,9 +136,16 @@ class CollateSerializers(serializers.ModelSerializer):
         else:
             return []
 
+    def get_users(self, collate):
+        users = collate.users.all()
+        if users:
+            return UserSerializer(users, many=True).data
+        else:
+            return []
+
     class Meta:
         model = Collate
-        fields = ['id', 'title', 'greeting', 'projects', 'created_at', 'updated_at', 'settings', 'tags']
+        fields = ['id', 'title', 'greeting', 'projects', 'created_at', 'updated_at', 'settings', 'tags', 'users']
 
 class CollateTagSerializer(serializers.ModelSerializer):
 
