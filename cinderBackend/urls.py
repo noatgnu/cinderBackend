@@ -20,7 +20,7 @@ from rest_framework import routers
 from rest_framework.authtoken.views import obtain_auth_token
 
 from cb.models import LabGroup
-from cb.views import DataChunkedUploadView, LogoutView
+from cb.views import DataChunkedUploadView, LogoutView, FrontEndTemplateView
 from cb.viewsets import ProjectViewSet, ProjectFileViewSet, AnalysisGroupViewSet, SampleAnnotationViewSet, \
     ComparisonMatrixViewSet, SearchResultViewSet, SearchSessionViewSet, SpeciesViewSet, CollateViewSet, \
     CollateTagViewSet, UserViewSet, LabGroupViewSet
@@ -46,4 +46,5 @@ urlpatterns = [
     path('api/chunked_upload/', DataChunkedUploadView.as_view(), name='chunked_upload'),
     path('api/chunked_upload/<uuid:pk>/', DataChunkedUploadView.as_view(), name='chunkedupload-detail'),
     path('api/logout/', LogoutView.as_view(), name='logout'),
+    path('api/frontend_template/', FrontEndTemplateView.as_view(), name='frontend_template'),
 ]

@@ -278,3 +278,6 @@ DRF_CHUNKED_UPLOAD_CHECKSUM = 'sha256'
 
 # CURTAIN settings
 CURTAIN_HOST = os.environ.get("CURTAIN_HOST", "https://celsus.muttsu.xyz")
+
+# FRONTEND settings
+FRONTEND_FOOTER = os.environ.get("FRONTEND_FOOTER", "MRC-PPU, University of Dundee. ASAP.")
