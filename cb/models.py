@@ -437,9 +437,25 @@ class SearchSession(models.Model):
                                             if related.analysis_group.id in primary_id_analysis_group_result_map[primary_id]:
                                                 for comparison_label in primary_id_analysis_group_result_map[primary_id][related.analysis_group.id]:
                                                     primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][comparison_label].searched_data = search_result.searched_data
+
                                         #result_in_file.append(search_result)
                                     elif related.file_category == "df":
                                         comparison_matrix = ComparisonMatrix.objects.filter(file=related).first()
+                                        ptm_data = {}
+                                        for i in ["modification_position_in_protein_col",
+                                                  "modification_position_in_peptide_col",
+                                                  "localization_prob_col", "peptide_seq_col"]:
+                                            if i in extra_data:
+                                                if line_data[column_headers_map[extra_data[i]]] != "":
+                                                    ptm_data[i] = line_data[column_headers_map[extra_data[i]]]
+                                                    if i == "localization_prob_col":
+                                                        if ptm_data[i]:
+                                                            ptm_data[i] = float(ptm_data[i])
+                                                        else:
+                                                            ptm_data[i] = None
+                                                    else:
+                                                        ptm_data[i] = line_data[column_headers_map[extra_data[i]]]
+
                                         if comparison_matrix.matrix:
                                             matrix = json.loads(comparison_matrix.matrix)
                                             for m in matrix:
@@ -461,6 +477,8 @@ class SearchSession(models.Model):
                                                             log2_fc=log2_fc,
                                                             log10_p=log10_p,
                                                         )
+                                                        if ptm_data:
+                                                            sr.ptm_data = json.dumps(ptm_data)
                                                         if "comparison_col" in m:
                                                             if m["comparison_col"] in column_headers_map:
                                                                 sr.comparison_label = line_data[column_headers_map[m["comparison_col"]]]
@@ -478,8 +496,11 @@ class SearchSession(models.Model):
                                                                     primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].comparison_label = sr.comparison_label
                                                                     primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].condition_A = sr.condition_A
                                                                     primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].condition_B = sr.condition_B
+                                                                    primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label].ptm_data = sr.ptm_data
                                                                 else:
                                                                     primary_id_analysis_group_result_map[primary_id][related.analysis_group.id][sr.comparison_label] = sr
+
+
                                                         #result_in_file.append(sr)
 
                                     elif related.file_category == "copy_number":
@@ -723,6 +744,7 @@ class SearchResult(models.Model):
     uniprot_id = models.CharField(max_length=255, blank=True, null=True)
     copy_number = models.FloatField(blank=True, null=True)
     rank = models.IntegerField(blank=True, null=True)
+    ptm_data = models.TextField(blank=True, null=True)
 
     class Meta:
         ordering = ['created_at']
@@ -767,23 +789,39 @@ class CurtainData(models.Model):
     def __repr__(self):
         return f"{self.link_id} - {self.host} - Created: {self.created_at}"
 
-    def parse_curtain_data(self, data: dict, diff_df: pd.DataFrame, primary_id_col: str, fold_change_col: str, p_value_col: str, comparison_col: str = None):
+    def parse_curtain_data(self, data: dict, diff_df: pd.DataFrame, primary_id_col: str, fold_change_col: str, p_value_col: str, comparison_col: str = None, ptm_data: dict = None):
         curtain_data = CurtainUniprotData(data["extraData"]["uniprot"])
         def parse_data(row: pd.Series, curtain_data: CurtainUniprotData, primary_id_col: str):
             uniprot = curtain_data.get_uniprot_data_from_pi(row[primary_id_col])
             if isinstance(uniprot, pd.Series):
-                row["Gene Names"] = uniprot["Gene Names"]
-                row["Entry"] = uniprot["Entry"]
+                if "Gene Names" in uniprot:
+                    row["Gene Names"] = uniprot["Gene Names"]
+                if "Entry" in uniprot:
+                    row["Entry"] = uniprot["Entry"]
             return row
 
         diff_df = diff_df.apply(lambda x: parse_data(x, curtain_data, primary_id_col), axis=1)
         self.settings = json.dumps(data["settings"])
+        columns = [primary_id_col, fold_change_col, p_value_col]
+        if "Gene Names" in diff_df.columns:
+            columns += ["Gene Names"]
+        if "Entry" in diff_df.columns:
+            columns += ["Entry"]
+        if ptm_data:
+            columns += [ptm_data["position_peptide_col"], ptm_data["position_col"], ptm_data["accession_col"], ptm_data["score_col"], ptm_data["peptide_seq_col"]]
         if comparison_col != "CurtainSetComparison":
-            diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry", comparison_col]]
+            columns += [comparison_col]
+            diff_df = diff_df[columns]
         else:
-            diff_df = diff_df[[primary_id_col, fold_change_col, p_value_col, "Gene Names", "Entry"]]
+            diff_df = diff_df[columns]
             diff_df[comparison_col] = "1"
         columns_rename_dict = {primary_id_col: "Primary ID", fold_change_col: "Fold Change", p_value_col: "P-value"}
+        if ptm_data:
+            columns_rename_dict[ptm_data["position_peptide_col"]] = "Position_in_Peptide"
+            columns_rename_dict[ptm_data["position_col"]] = "Position_in_Protein"
+            columns_rename_dict[ptm_data["accession_col"]] = "Accession"
+            columns_rename_dict[ptm_data["score_col"]] = "Score"
+            columns_rename_dict[ptm_data["peptide_seq_col"]] = "Peptide Sequence"
         if comparison_col:
             columns_rename_dict[comparison_col] = "Comparison"
         diff_df.rename(columns=columns_rename_dict,
@@ -835,14 +873,26 @@ class CurtainData(models.Model):
         primary_id_col = data["differentialForm"]["_primaryIDs"]
         fold_change_col = data["differentialForm"]["_foldChange"]
         p_value_col = data["differentialForm"]["_significant"]
-        print(diff_df.shape)
+        ptm_data = {}
+        if "_accession" in data["differentialForm"]:
+            ptm_data["accession_col"] = data["differentialForm"]["_accession"]
+        if "_position" in data["differentialForm"]:
+            ptm_data["position_col"] = data["differentialForm"]["_position"]
+        if "_positionPeptide" in data["differentialForm"]:
+            ptm_data["position_peptide_col"] = data["differentialForm"]["_positionPeptide"]
+        if "_score" in data["differentialForm"]:
+            ptm_data["score_col"] = data["differentialForm"]["_score"]
+        if "_peptideSequence" in data["differentialForm"]:
+            ptm_data["peptide_seq_col"] = data["differentialForm"]["_peptideSequence"]
         if data["differentialForm"]["_comparison"]:
             comparison_col = data["differentialForm"]["_comparison"]
             if data["differentialForm"]["_comparisonSelect"]:
                 comparison_label = data["differentialForm"]["_comparisonSelect"]
                 diff_df[comparison_col] = diff_df[comparison_col].astype(str)
+                if isinstance(comparison_label, str):
+                    comparison_label = [comparison_label]
                 diff_df = diff_df[diff_df[comparison_col].isin(comparison_label)]
-        print(diff_df.shape)
+
         if data["differentialForm"]["_transformFC"]:
             diff_df[fold_change_col] = np.log2(diff_df[fold_change_col])
         if data["differentialForm"]["_transformSignificant"]:
@@ -923,6 +973,22 @@ class CurtainData(models.Model):
             "modification_position_in_protein_col": None,
             "localization_prob_col": None,
         }
+        ptm_data = {}
+        if "_accession" in data["differentialForm"]:
+            ptm_data["accession_col"] = data["differentialForm"]["_accession"]
+            diff_file_extra_data["uniprot_id_col"] = data["differentialForm"]["_accession"]
+        if "_position" in data["differentialForm"]:
+            ptm_data["position_col"] = data["differentialForm"]["_position"]
+            diff_file_extra_data["modification_position_in_protein_col"] = data["differentialForm"]["_position"]
+        if "_positionPeptide" in data["differentialForm"]:
+            ptm_data["position_peptide_col"] = data["differentialForm"]["_positionPeptide"]
+            diff_file_extra_data["modification_position_in_peptide_col"] = data["differentialForm"]["_positionPeptide"]
+        if "_score" in data["differentialForm"]:
+            ptm_data["score_col"] = data["differentialForm"]["_score"]
+            diff_file_extra_data["localization_prob_col"] = data["differentialForm"]["_score"]
+        if "_peptideSequence" in data["differentialForm"]:
+            ptm_data["peptide_seq_col"] = data["differentialForm"]["_peptideSequence"]
+            diff_file_extra_data["peptide_seq_col"] = data["differentialForm"]["_peptideSequence"]
 
         diff_project_file = ProjectFile.objects.create(
             name=f"{analysis_group.name} - Differential Analysis.txt",
@@ -1029,6 +1095,8 @@ class CurtainData(models.Model):
         if data["differentialForm"]["_comparisonSelect"]:
             if data["differentialForm"]["_comparison"] != "CurtainSetComparison":
                 comparison_label = data["differentialForm"]["_comparisonSelect"]
+                if isinstance(comparison_label, str):
+                    comparison_label = [comparison_label]
                 diff_file = diff_file[diff_file[data["differentialForm"]["_comparison"]].isin(comparison_label)]
         self.parse_curtain_data(data,
                                 diff_file,
