@@ -322,7 +322,7 @@ class SearchSession(models.Model):
             files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df"])
         else:
             files = ProjectFile.objects.filter(file_category__in=["df"])
-        print(files)
+       #print(files)
         search_query = SearchQuery(self.search_term, search_type='websearch')
         files = files.filter(
             file_contents__search_vector=search_query
@@ -333,9 +333,9 @@ class SearchSession(models.Model):
         term_headline_file_dict = {}
         found_terms = []
         results = []
-        print(files)
+        #print(files)
         for f in files:
-            print(f)
+            #print(f)
             if f.id not in term_headline_file_dict:
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
             term_contexts = f.get_search_items_from_headline()
@@ -348,6 +348,9 @@ class SearchSession(models.Model):
                     found_terms.append(term)
         channel_layer = get_channel_layer()
         count_found_files = len([f for f in term_headline_file_dict])
+        print(count_found_files)
+        for f in term_headline_file_dict:
+            print(term_headline_file_dict[f]["file"].file.name)
         current_progress = 0
         async_to_sync(channel_layer.group_send)(
             f"search_{self.session_id}", {
@@ -375,7 +378,7 @@ class SearchSession(models.Model):
                     }})
             term_contexts = term_headline_file_dict[f]['term_contexts']
             for result in self.extract_result(f, term_contexts, term_headline_file_dict):
-                print("result", result)
+                #print("result", result)
                 if result.primary_id not in pi_list:
                     pi_list.append(result.primary_id)
                 if result.primary_id not in primary_id_analysis_group_result_map:
@@ -583,7 +586,7 @@ class SearchSession(models.Model):
                         search_result.gene_name = gene_name
                         search_result.primary_id = primary_id
                         search_result.uniprot_id = uniprot_id
-                        print(search_result)
+                        #print(search_result)
                         if self.search_mode == "gene":
                             if "gene_name_col" in extra_data:
                                 if gene_name:
