@@ -652,6 +652,7 @@ class SearchSession(models.Model):
                                         sr.comparison_label = m["comparison_label"]
                                 else:
                                     sr.comparison_label = m["comparison_label"]
+                                print(sr.__dict__)
                                 if sr.comparison_label:
                                     if len(sr.comparison_label) > 0:
                                         yield sr
