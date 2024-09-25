@@ -378,7 +378,7 @@ class SearchSession(models.Model):
                     }})
             term_contexts = term_headline_file_dict[f]['term_contexts']
             for result in self.extract_result(f, term_contexts, term_headline_file_dict):
-                #print("result", result)
+                print(result.__dict__)
                 if result.primary_id not in pi_list:
                     pi_list.append(result.primary_id)
                 if result.primary_id not in primary_id_analysis_group_result_map:
