@@ -568,6 +568,7 @@ class SearchSession(models.Model):
                 if file.extra_data:
                     extra_data = json.loads(file.extra_data)
                     for search_result in self.extract_result_data(column_headers_map, file, found_term, result):
+                        print(search_result.__dict__)
                         gene_name = ""
                         primary_id = ""
                         uniprot_id = ""
