@@ -466,6 +466,8 @@ class SearchSession(models.Model):
                                                 if line_data[column_headers_map[m["p_value_col"]]] != "":
                                                     log10_p = float(line_data[column_headers_map[m["p_value_col"]]])
                                                 if log2_fc and log10_p:
+                                                    print(log2_fc, log10_p)
+                                                    print(self.log2_fc, self.log10_p_value)
                                                     if self.apply_fc_pvalue_filter(log2_fc, log10_p):
                                                         sr = SearchResult(
                                                             search_term="",
