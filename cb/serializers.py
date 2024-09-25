@@ -42,6 +42,7 @@ class SearchResultSerializer(serializers.ModelSerializer):
     file = serializers.SerializerMethodField()
     analysis_group = serializers.SerializerMethodField()
     searched_data = serializers.SerializerMethodField()
+    ptm_data = serializers.SerializerMethodField()
 
     def get_file(self, search_result):
         return {'id': search_result.file.id, 'name': search_result.file.name, 'file_type': search_result.file.file_type, 'file_category': search_result.file.file_category}
@@ -54,10 +55,15 @@ class SearchResultSerializer(serializers.ModelSerializer):
             return None
         return json.loads(search_result.searched_data)
 
+    def get_ptm_data(self, search_result):
+        if search_result.ptm_data is None:
+            return None
+        return json.loads(search_result.ptm_data)
+
     class Meta:
         model = SearchResult
         fields = ['id', 'search_term', 'created_at', 'updated_at', 'session', 'analysis_group', 'file', 'primary_id', 'gene_name', 'uniprot_id',
-                  'log2_fc', 'log10_p', 'searched_data', 'comparison_label', 'condition_A', 'condition_B', 'copy_number', 'rank']
+                  'log2_fc', 'log10_p', 'searched_data', 'comparison_label', 'condition_A', 'condition_B', 'copy_number', 'rank', 'ptm_data']
 
 
 class SearchSessionSerializer(serializers.ModelSerializer):
