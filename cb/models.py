@@ -572,6 +572,8 @@ class SearchSession(models.Model):
                         gene_name = ""
                         primary_id = ""
                         uniprot_id = ""
+                        print(extra_data)
+                        print(column_headers_map)
                         if "gene_name_col" in extra_data:
                             if extra_data["gene_name_col"]:
                                 gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
