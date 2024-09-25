@@ -586,7 +586,7 @@ class SearchSession(models.Model):
                         search_result.gene_name = gene_name
                         search_result.primary_id = primary_id
                         search_result.uniprot_id = uniprot_id
-                        #print(search_result)
+                        print(search_result.__dict__)
                         if self.search_mode == "gene":
                             if "gene_name_col" in extra_data:
                                 if gene_name:
