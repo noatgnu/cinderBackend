@@ -875,7 +875,7 @@ class CurtainData(models.Model):
                     sep=dialect.delimiter,
                     quotechar=dialect.quotechar
                 )
-            except pd.errors.ParserError:
+            except:
                 diff_df = pd.read_csv(io.StringIO(data["processed"]), sep=None)
         else:
             diff_df = pd.read_csv(differential_analysis_file.file.path, sep=differential_analysis_file.get_delimiter())
@@ -942,7 +942,7 @@ class CurtainData(models.Model):
                 sep=dialect.delimiter,
                 quotechar=dialect.quotechar
             )
-        except pd.errors.ParserError:
+        except:
             diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
         try:
             sniffer = csv.Sniffer()
@@ -953,7 +953,7 @@ class CurtainData(models.Model):
                 sep=dialect.delimiter,
                 quotechar=dialect.quotechar
             )
-        except pd.errors.ParserError:
+        except:
             searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
 
         media_folder = os.path.join(settings.MEDIA_ROOT, "user_files")
