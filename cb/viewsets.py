@@ -676,7 +676,7 @@ class SpeciesViewSet(viewsets.ModelViewSet, FilterMixin):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'taxon', 'official_name', 'code', 'common_name', 'synonym']
     filterset_fields = ['taxon', 'official_name', 'code', 'common_name', 'synonym']
-    search_fields = ['common_name', 'synonym', 'official_name', 'code']
+    search_fields = ['^common_name', '^official_name']
 
     def get_queryset(self):
         return super().get_queryset()
