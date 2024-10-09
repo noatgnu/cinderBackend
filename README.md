@@ -58,7 +58,7 @@ curtainutils = "^0.1.16"
     python manage.py runserver
     ```
 
-## Development Setup with Docker
+## Setup with Docker
 
 1. **Clone the repository:**
     ```sh
