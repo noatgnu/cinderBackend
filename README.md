@@ -31,7 +31,7 @@ gunicorn = "^22.0.0"
 curtainutils = "^0.1.16"
 ```
 
-## Development Installation
+## Development Installation (manual)
 
 1. Clone the repository:
     ```sh
@@ -48,18 +48,41 @@ curtainutils = "^0.1.16"
     ```sh
     poetry shell
     ```
-
-## Usage
-
-1. Apply database migrations:
+4. Apply database migrations:
     ```sh
     python manage.py migrate
     ```
 
-2. Run the development server:
+5. Run the development server:
     ```sh
     python manage.py runserver
     ```
+
+## Development Setup with Docker
+
+1. **Clone the repository:**
+    ```sh
+    git clone https://github.com/noatgnu/cinderbackend.git
+    cd cinderbackend
+    ```
+
+2. **Build and start the containers:**
+    ```sh
+    docker-compose up --build
+    ```
+
+3. **Apply database migrations:**
+    ```sh
+    docker-compose exec cinderbackend python manage.py migrate
+    ```
+
+4. **Create a superuser (optional):**
+    ```sh
+    docker-compose exec -it cinderbackend python manage.py createsuperuser
+    ```
+
+5. **Access the development server:**
+    The development server will be available at `http://localhost:8000`.
 
 ## License
 This project is licensed under the MIT License.
