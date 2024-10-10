@@ -1,0 +1,36 @@
+---
+- name: Deploy CinderBackend Services
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Ensure Docker is installed
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker Compose is installed
+      get_url:
+        url: https://github.com/docker/compose/releases/download/1.29.2/docker-compose-`uname -s`-`uname -m`
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Clone the repository
+      git:
+        repo: 'https://github.com/noatgnu/cinderbackend.git'
+        dest: /opt/cinderbackend
+
+    - name: Change to the project directory
+      command: chdir=/opt/cinderbackend /bin/bash -c "true"
+
+    - name: Build and start the containers
+      command: chdir=/opt/cinderbackend docker-compose up --build -d
+
+    - name: Apply database migrations
+      command: chdir=/opt/cinderbackend docker-compose exec cinderbackend python manage.py migrate
+
+    - name: Create a superuser (optional)
+      command: chdir=/opt/cinderbackend docker-compose exec -T cinderbackend python manage.py createsuperuser
+      ignore_errors: yes
