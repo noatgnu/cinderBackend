@@ -62,8 +62,5 @@
       command: chdir=/opt/cinderbackend docker-compose up --build -d
 
     - name: Apply database migrations
-      command: chdir=/opt/cinderbackend docker-compose exec cinderbackend python manage.py migrate
+      command: chdir=/opt/cinderbackend docker-compose exec -T cinderbackend python manage.py migrate
 
-    - name: Create a superuser (optional)
-      command: chdir=/opt/cinderbackend docker-compose exec -T cinderbackend python manage.py createsuperuser
-      ignore_errors: yes
