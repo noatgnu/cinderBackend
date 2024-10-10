@@ -4,19 +4,44 @@
   become: yes
 
   tasks:
-    - name: Update apt cache
+    - name: Install aptitude
       apt:
-        update_cache: yes
+        name: aptitude
+        state: latest
+        update_cache: true
 
-    - name: Upgrade all packages
+    - name: Install required system packages
       apt:
-        upgrade: dist
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+        state: latest
+        update_cache: true
 
-    - name: Ensure Docker is installed
-      apt:
-        name: docker.io
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
         state: present
-        update_cache: yes
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu jammy stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt:
+        name: docker-ce
+        state: latest
+        update_cache: true
+
+    - name: Install Docker Module for Python
+      pip:
+        name: docker
 
     - name: Ensure Docker Compose is installed
       get_url:
