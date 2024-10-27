@@ -46,8 +46,9 @@ services:
       - REDIS_HOST=rediscinderbackend
       - CORS_ORIGIN_WHITELIST=http://localhost,http://localhost:4200,http://172.31.0.5
       - ALLOWED_HOSTS=localhost,172.31.0.5,localhost:8000
-      - VIRTUAL_HOST=api.yourdomain.com
-      - LETSENCRYPT_HOST=api.yourdomain.com
+      - VIRTUAL_HOST=yourdomain.com
+      - VIRTUAL_PATH=/api
+      - LETSENCRYPT_HOST=yourdomain.com
       - LETSENCRYPT_EMAIL=your-email@example.com
     networks:
       - cinderbackend-net
