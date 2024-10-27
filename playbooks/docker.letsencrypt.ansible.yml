@@ -68,8 +68,8 @@
     - name: Update API_HOST in Dockerfile-frontend
       lineinfile:
         path: /opt/cinderbackend/dockerfiles/Dockerfile-frontend
-        regexp: 'ARG API_HOST=.*'
-        line: 'ARG API_HOST={{ api_host }}'
+        regexp: 'ENV API_HOST=.*'
+        line: 'ENV API_HOST={{ api_host }}'
 
     - name: Build and start Docker containers
       command: docker-compose -f /opt/cinderbackend/docker-compose.letsencrypt.yml up --build -d
