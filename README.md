@@ -98,6 +98,32 @@ Cinderbackend is the backend service for the Cinder project, which aims to provi
 5. **Access the development server:**
     The development server will be available at `https://yourdomain.com`.
 
+## Setup with Self-Signed Certificates
+
+1. **Clone the repository:**
+    ```sh
+    git clone https://github.com/noatgnu/cinderbackend.git
+    cd cinderbackend
+    ```
+
+2. **Build and start the containers with self-signed certificates:**
+    ```sh
+    docker-compose up --build
+    ```
+
+3. **Apply database migrations:**
+    ```sh
+    docker-compose exec cinderbackend python manage.py migrate
+    ```
+
+4. **Create a superuser (optional):**
+    ```sh
+    docker-compose exec -it cinderbackend python manage.py createsuperuser
+    ```
+
+5. **Access the development server:**
+    The development server will be available at `https://localhost`.
+
 ## Environment Variables
 
 Create a `.env` file in the root directory of the project and set the following environment variables:
