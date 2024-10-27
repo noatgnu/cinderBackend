@@ -1,0 +1,21 @@
+FROM node:20-bullseye-slim
+
+ARG BUILD_DATE
+ENV API_HOST=localhost
+
+WORKDIR /app
+RUN apt update
+RUN apt -y upgrade
+RUN apt install -y git
+RUN git clone https://github.com/noatgnu/CinderFrontend.git
+
+RUN sed -i "s;https://cinder.proteo.info;https://${API_HOST};g" /app/CinderFrontend/src/environments/environment.ts
+WORKDIR /app/CinderFrontend
+RUN npm install
+RUN npm run build
+
+FROM nginx:latest
+
+COPY --from=0 /app/CinderFrontend/dist/browser /usr/share/nginx/html
+
+EXPOSE 80

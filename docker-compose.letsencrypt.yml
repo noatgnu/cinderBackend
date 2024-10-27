@@ -1,12 +1,42 @@
 version: '3.8'
 services:
+  nginx-proxy:
+    image: jwilder/nginx-proxy
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./certs:/etc/nginx/certs:ro
+      - ./vhost.d:/etc/nginx/vhost.d
+      - ./html:/usr/share/nginx/html
+      - ./media:/media
+      - ./staticfiles:/static
+    networks:
+      - cinderbackend-net
+
+  acme-companion:
+    image: nginxproxy/acme-companion
+    container_name: acme-companion
+    depends_on:
+      - nginx-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/etc/nginx/certs:rw
+      - ./vhost.d:/etc/nginx/vhost.d
+      - ./html:/usr/share/nginx/html
+      - ./acme:/etc/acme.sh
+    environment:
+      - DEFAULT_EMAIL=your-email@example.com
+    networks:
+      - cinderbackend-net
+
   cinderbackend:
     build:
       context: .
       dockerfile: ./dockerfiles/Dockerfile
     container_name: cinderbackend
-    ports:
-      - "8000:8000"
     environment:
       - POSTGRES_NAME=postgres
       - POSTGRES_DB=postgres
@@ -16,6 +46,9 @@ services:
       - REDIS_HOST=rediscinderbackend
       - CORS_ORIGIN_WHITELIST=http://localhost,http://localhost:4200,http://172.31.0.5
       - ALLOWED_HOSTS=localhost,172.31.0.5,localhost:8000
+      - VIRTUAL_HOST=api.yourdomain.com
+      - LETSENCRYPT_HOST=api.yourdomain.com
+      - LETSENCRYPT_EMAIL=your-email@example.com
     networks:
       - cinderbackend-net
     volumes:
@@ -45,28 +78,8 @@ services:
       context: .
       dockerfile: ./dockerfiles/Dockerfile-frontend
     container_name: frontend
-    ports:
-      - "3000:80"
-    networks:
-      - cinderbackend-net
-
-  nginx-cinderbackend:
-    build:
-      context: .
-      dockerfile: ./dockerfiles/Dockerfile-nginx
-    container_name: nginx-cinderbackend
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./media:/media/
-      - ./staticfiles:/static/
-      - ./certs:/etc/nginx/certs
-    depends_on:
-      - cinderbackend
-      - frontend
-      - certs
+    env_file:
+      - /opt/cinderbackend/frontend.env
     networks:
       - cinderbackend-net
 
@@ -95,20 +108,6 @@ services:
       - REDIS_PASSWORD=redis
     ports:
       - "6379:6379"
-    networks:
-      - cinderbackend-net
-
-  certs:
-    image: alpine:latest
-    container_name: certs
-    command: >
-      /bin/sh -c "
-      apk add --no-cache openssl &&
-      mkdir -p /certs &&
-      openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /certs/nginx.key -out /certs/nginx.crt -subj '/CN=localhost'
-      "
-    volumes:
-      - ./certs:/certs
     networks:
       - cinderbackend-net
 

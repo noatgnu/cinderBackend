@@ -1,0 +1,88 @@
+---
+- name: Setup Docker and Let's Encrypt
+  hosts: all
+  become: true
+
+  vars:
+    domain: "yourdomain.com"
+    api_domain: "api.yourdomain.com"
+    email: "your-email@example.com"
+    postgres_password: "postgres"
+    redis_password: "redis"
+    api_host: "https://yourdomain.com"
+
+  tasks:
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Install Docker Compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/1.29.2/docker-compose-`uname -s`-`uname -m`
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Create project directory
+      file:
+        path: /opt/cinderbackend
+        state: directory
+
+    - name: Copy project files
+      copy:
+        src: "{{ item }}"
+        dest: /opt/cinderbackend/
+      with_items:
+        - docker-compose.letsencrypt.yml
+        - dockerfiles/
+        - vhost.d/
+        - certs/
+        - html/
+        - acme/
+
+    - name: Create .env file
+      copy:
+        dest: /opt/cinderbackend/.env
+        content: |
+          POSTGRES_NAME=postgres
+          POSTGRES_DB=postgres
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD={{ postgres_password }}
+          POSTGRES_HOST=dbcinderbackend
+          REDIS_HOST=rediscinderbackend
+          CORS_ORIGIN_WHITELIST=http://localhost,http://localhost:4200,http://172.31.0.5
+          ALLOWED_HOSTS=localhost,172.31.0.5,localhost:8000
+          VIRTUAL_HOST={{ api_domain }}
+          LETSENCRYPT_HOST={{ api_domain }}
+          LETSENCRYPT_EMAIL={{ email }}
+
+    - name: Create frontend .env file
+      copy:
+        dest: /opt/cinderbackend/frontend.env
+        content: |
+          VIRTUAL_HOST={{ domain }}
+          LETSENCRYPT_HOST={{ domain }}
+          LETSENCRYPT_EMAIL={{ email }}
+
+    - name: Update API_HOST in Dockerfile-frontend
+      lineinfile:
+        path: /opt/cinderbackend/dockerfiles/Dockerfile-frontend
+        regexp: 'ARG API_HOST=.*'
+        line: 'ARG API_HOST={{ api_host }}'
+
+    - name: Build and start Docker containers
+      command: docker-compose -f /opt/cinderbackend/docker-compose.letsencrypt.yml up --build -d
+      args:
+        chdir: /opt/cinderbackend
+
+    - name: Apply database migrations
+      command: docker-compose -f /opt/cinderbackend/docker-compose.letsencrypt.yml exec cinderbackend python manage.py migrate
+      args:
+        chdir: /opt/cinderbackend
+
+    - name: Create superuser (optional)
+      command: docker-compose -f /opt/cinderbackend/docker-compose.letsencrypt.yml exec -T cinderbackend python manage.py createsuperuser --noinput --username admin --email {{ email }}
+      args:
+        chdir: /opt/cinderbackend
+      ignore_errors: yes
