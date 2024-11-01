@@ -316,14 +316,13 @@ class SearchSession(models.Model):
         self.in_progress = True
         self.save()
         analysis_groups = self.analysis_groups.all()
-        #print(analysis_groups)
         if self.species:
             analysis_groups = analysis_groups.filter(project__species=self.species)
         if analysis_groups.exists():
             files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df"])
         else:
             files = ProjectFile.objects.filter(file_category__in=["df"])
-       #print(files)
+
         search_query = SearchQuery(self.search_term, search_type='websearch')
         files = files.filter(
             file_contents__search_vector=search_query
@@ -334,9 +333,7 @@ class SearchSession(models.Model):
         term_headline_file_dict = {}
         found_terms = []
         results = []
-        #print(files)
         for f in files:
-            #print(f)
             if f.id not in term_headline_file_dict:
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
             term_contexts = f.get_search_items_from_headline()
@@ -349,9 +346,6 @@ class SearchSession(models.Model):
                     found_terms.append(term)
         channel_layer = get_channel_layer()
         count_found_files = len([f for f in term_headline_file_dict])
-        #print(count_found_files)
-        #for f in term_headline_file_dict:
-            #print(term_headline_file_dict[f]["file"].file.name)
         current_progress = 0
         async_to_sync(channel_layer.group_send)(
             f"search_{self.session_id}", {
@@ -379,7 +373,6 @@ class SearchSession(models.Model):
                     }})
             term_contexts = term_headline_file_dict[f]['term_contexts']
             for result in self.extract_result(f, term_contexts, term_headline_file_dict):
-                #print(result.__dict__)
                 if result.primary_id not in pi_list:
                     pi_list.append(result.primary_id)
                 if result.primary_id not in primary_id_analysis_group_result_map:
@@ -470,8 +463,6 @@ class SearchSession(models.Model):
                                                 if line_data[column_headers_map[m["p_value_col"]]] != "":
                                                     log10_p = float(line_data[column_headers_map[m["p_value_col"]]])
                                                 if log2_fc and log10_p:
-                                                    #print(log2_fc, log10_p)
-                                                    #print(self.log2_fc, self.log10_p_value)
                                                     if self.apply_fc_pvalue_filter(log2_fc, log10_p):
                                                         sr = SearchResult(
                                                             search_term="",
@@ -569,12 +560,9 @@ class SearchSession(models.Model):
                 if file.extra_data:
                     extra_data = json.loads(file.extra_data)
                     for search_result in self.extract_result_data(column_headers_map, file, found_term, result):
-                        print(search_result.__dict__)
                         gene_name = ""
                         primary_id = ""
                         uniprot_id = ""
-                        print(extra_data)
-                        print(column_headers_map)
                         if "gene_name_col" in extra_data:
                             if extra_data["gene_name_col"]:
                                 gene_name_col_index = column_headers_map[extra_data["gene_name_col"]]
@@ -590,7 +578,6 @@ class SearchSession(models.Model):
                         search_result.gene_name = gene_name
                         search_result.primary_id = primary_id
                         search_result.uniprot_id = uniprot_id
-                        print(search_result.__dict__)
                         if self.search_mode == "gene":
                             if "gene_name_col" in extra_data:
                                 if gene_name:
@@ -612,23 +599,15 @@ class SearchSession(models.Model):
 
 
     def extract_result_data(self, column_headers_map, file, found_term, result):
-        # print(file.file_category)
         if file.file_category == "df":
-            print(file)
-            print(ComparisonMatrix.objects.filter(file=file))
             comparison_matrix = ComparisonMatrix.objects.filter(file=file).first()
             if comparison_matrix:
-                print("comparison")
                 if comparison_matrix.matrix:
                     matrix = json.loads(comparison_matrix.matrix)
-
-                    print(matrix)
                     for m in matrix:
-                        # print(result["context"])
                         log2_fc = None
                         if result["context"][column_headers_map[m["fold_change_col"]]] != "":
                             log2_fc = float(result["context"][column_headers_map[m["fold_change_col"]]])
-                        # print(log2_fc)
                         log10_p = None
                         if result["context"][column_headers_map[m["p_value_col"]]] != "":
                             log10_p = float(result["context"][column_headers_map[m["p_value_col"]]])
@@ -647,7 +626,6 @@ class SearchSession(models.Model):
                                 if "comparison_col" in m:
                                     if m["comparison_col"] in column_headers_map:
                                         label = result["context"][column_headers_map[m["comparison_col"]]]
-                                        print(label, m["comparison_label"])
                                         if m["comparison_label"]:
                                             if label == m['comparison_label']:
                                                 sr.comparison_label = m['comparison_label']
@@ -656,7 +634,6 @@ class SearchSession(models.Model):
                                         sr.comparison_label = m["comparison_label"]
                                 else:
                                     sr.comparison_label = m["comparison_label"]
-                                print(sr.__dict__)
                                 if sr.comparison_label:
                                     if len(sr.comparison_label) > 0:
                                         yield sr
@@ -673,9 +650,7 @@ class SearchSession(models.Model):
             if sample_annotation:
                 annotation = json.loads(sample_annotation.annotations)
                 searched_data = []
-                print(annotation)
                 for a in annotation:
-                    #print(result["context"])
 
                     if a["Sample"] in column_headers_map:
                         sample_col_index = column_headers_map[a["Sample"]]
