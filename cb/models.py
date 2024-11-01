@@ -175,6 +175,7 @@ class ProjectFile(models.Model):
             for match in re.finditer(pattern, self.headline):
                 if match:
                     m = match.group(1)
+                    print(m)
                     if m not in term_contexts:
                         term_contexts[m] = []
                     start = match.start(0)
@@ -315,7 +316,7 @@ class SearchSession(models.Model):
         self.in_progress = True
         self.save()
         analysis_groups = self.analysis_groups.all()
-        print(analysis_groups)
+        #print(analysis_groups)
         if self.species:
             analysis_groups = analysis_groups.filter(project__species=self.species)
         if analysis_groups.exists():
@@ -348,9 +349,9 @@ class SearchSession(models.Model):
                     found_terms.append(term)
         channel_layer = get_channel_layer()
         count_found_files = len([f for f in term_headline_file_dict])
-        print(count_found_files)
-        for f in term_headline_file_dict:
-            print(term_headline_file_dict[f]["file"].file.name)
+        #print(count_found_files)
+        #for f in term_headline_file_dict:
+            #print(term_headline_file_dict[f]["file"].file.name)
         current_progress = 0
         async_to_sync(channel_layer.group_send)(
             f"search_{self.session_id}", {
@@ -378,7 +379,7 @@ class SearchSession(models.Model):
                     }})
             term_contexts = term_headline_file_dict[f]['term_contexts']
             for result in self.extract_result(f, term_contexts, term_headline_file_dict):
-                print(result.__dict__)
+                #print(result.__dict__)
                 if result.primary_id not in pi_list:
                     pi_list.append(result.primary_id)
                 if result.primary_id not in primary_id_analysis_group_result_map:
@@ -469,8 +470,8 @@ class SearchSession(models.Model):
                                                 if line_data[column_headers_map[m["p_value_col"]]] != "":
                                                     log10_p = float(line_data[column_headers_map[m["p_value_col"]]])
                                                 if log2_fc and log10_p:
-                                                    print(log2_fc, log10_p)
-                                                    print(self.log2_fc, self.log10_p_value)
+                                                    #print(log2_fc, log10_p)
+                                                    #print(self.log2_fc, self.log10_p_value)
                                                     if self.apply_fc_pvalue_filter(log2_fc, log10_p):
                                                         sr = SearchResult(
                                                             search_term="",
