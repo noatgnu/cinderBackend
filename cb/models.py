@@ -35,9 +35,6 @@ import cb
 class Abs(Func):
     function = 'ABS'
 
-class CustomSearchVector(Func):
-    function = 'to_tsvector'
-    template = "to_tsvector('english', %(expressions)s)"
 
 # Project model represents a project in the system.
 # Each project has a name, description, hash, metadata, global_id, temporary status, user, encrypted status, created_at and updated_at fields.
@@ -328,10 +325,8 @@ class SearchSession(models.Model):
             files = ProjectFile.objects.filter(file_category__in=["df"])
 
         search_query = SearchQuery(self.search_term, search_type='websearch')
-        files = files.annotate(
-            custom_search_vector=CustomSearchVector('file_contents__content')
-        ).filter(
-            custom_search_vector=search_query
+        files = files.filter(
+            file_contents__search_vector=search_query
         ).annotate(
             headline=SearchHeadline(
                 'file_contents__content', search_query, start_sel="<b>", stop_sel="</b>", highlight_all=True)
