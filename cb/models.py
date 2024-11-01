@@ -37,7 +37,7 @@ class Abs(Func):
 
 class CustomSearchVector(Func):
     function = 'to_tsvector'
-    template = "to_tsvector('english', %s)"
+    template = "to_tsvector('english', %(expressions)s)"
 
 # Project model represents a project in the system.
 # Each project has a name, description, hash, metadata, global_id, temporary status, user, encrypted status, created_at and updated_at fields.
