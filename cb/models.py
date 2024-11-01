@@ -696,7 +696,6 @@ class SearchSession(models.Model):
         filepath = filepath.replace('\\', '/')
 
         result = subprocess.run(['bash', search_sh_path, ','.join(terms), filepath], capture_output=True)
-        print('bash', search_sh_path, ','.join(terms), filepath)
         data = result.stdout.decode("utf-8")
         for i in data.split("\n"):
             if i == "":
