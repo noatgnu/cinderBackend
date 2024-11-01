@@ -324,7 +324,7 @@ class SearchSession(models.Model):
         else:
             files = ProjectFile.objects.filter(file_category__in=["df"])
 
-        search_query = SearchQuery(self.search_term, search_type='raw')
+        search_query = SearchQuery(self.search_term, search_type='plain')
         files = files.filter(
             file_contents__search_vector=search_query
         ).annotate(
