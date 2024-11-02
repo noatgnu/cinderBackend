@@ -367,6 +367,7 @@ class SearchSession(models.Model):
         else:
             files = ProjectFile.objects.filter(file_category__in=["df"])
         search_dictionary = split_terms(self.search_term)
+        print(search_dictionary)
         search_query = SearchQuery(self.search_term, search_type='websearch')
         files = files.filter(
             file_contents__search_vector=search_query
