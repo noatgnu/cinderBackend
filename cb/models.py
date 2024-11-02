@@ -185,9 +185,8 @@ class ProjectFile(models.Model):
             #pattern = '(?<!\S)(?<!-|\w)(;)*<b>(.*?)</b>'
             pattern = r'<b>(.*?)</b>'
             term_contexts = {}
-            print(split_term_dict)
             for match in re.finditer(pattern, self.headline):
-                print(match)
+
                 if match:
                     m = match.group(1)
                     match_lower = m.lower()
@@ -203,12 +202,10 @@ class ProjectFile(models.Model):
                         original_term_length = len(term)
                         if original_term_length > len(m):
                             leftover = term[term_length:]
-                            print(leftover)
                             leftover_length = len(leftover)
                             match_position_after_b = match.end(0)
                             try:
                                 leftover_equilavent = self.headline[match_position_after_b:match_position_after_b+leftover_length]
-                                print(leftover_equilavent)
                                 if "<b" in leftover_equilavent:
                                     leftover_equilavent = self.headline[match_position_after_b:match_position_after_b+leftover_length+3].replace("<b>", "")
                                 if leftover == leftover_equilavent.lower():

@@ -590,6 +590,10 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
         if 'session_id' in request.data:
             session_id = request.data['session_id']
             search_session = SearchSession.objects.create(search_term=search_term, session_id=session_id)
+            search_sessions = SearchSession.objects.filter(session_id=session_id).order_by('-created_at')
+            if search_sessions.count() > 50:
+                for session in search_sessions[50:]:
+                    session.delete()
         else:
             search_session = SearchSession.objects.create(search_term=search_term)
         if 'species' in request.data:
