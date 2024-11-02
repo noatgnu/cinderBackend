@@ -186,6 +186,7 @@ class ProjectFile(models.Model):
             pattern = r'<b>(.*?)</b>'
             term_contexts = {}
             for match in re.finditer(pattern, self.headline):
+                print(match)
                 if match:
                     m = match.group(1)
                     match_lower = m.lower()
