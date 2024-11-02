@@ -375,6 +375,7 @@ class SearchSession(models.Model):
             headline=SearchHeadline(
                 'file_contents__content', search_query, start_sel="<b>", stop_sel="</b>", highlight_all=True)
         ).distinct()
+        print(files)
         term_headline_file_dict = {}
         found_terms = []
         results = []
