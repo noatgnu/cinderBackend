@@ -195,7 +195,7 @@ class ProjectFile(models.Model):
                         continue
                     term_length = len(m)
                     for term in split_term_dict[match_lower]:
-                        if term == m:
+                        if term == match_lower:
                             found = True
                             break
 
