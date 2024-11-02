@@ -185,6 +185,7 @@ class ProjectFile(models.Model):
             #pattern = '(?<!\S)(?<!-|\w)(;)*<b>(.*?)</b>'
             pattern = r'<b>(.*?)</b>'
             term_contexts = {}
+            print(split_term_dict)
             for match in re.finditer(pattern, self.headline):
                 print(match)
                 if match:
@@ -367,7 +368,6 @@ class SearchSession(models.Model):
         else:
             files = ProjectFile.objects.filter(file_category__in=["df"])
         search_dictionary = split_terms(self.search_term)
-        print(search_dictionary)
         search_query = SearchQuery(self.search_term, search_type='websearch')
         files = files.filter(
             file_contents__search_vector=search_query
@@ -380,6 +380,7 @@ class SearchSession(models.Model):
         results = []
         for f in files:
             if f.id not in term_headline_file_dict:
+                print(f.id)
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
             term_contexts = f.get_search_items_from_headline(search_dictionary)
             for t in term_contexts:
