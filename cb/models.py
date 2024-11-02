@@ -209,6 +209,8 @@ class ProjectFile(models.Model):
                             try:
                                 leftover_equilavent = self.headline[match_position_after_b:match_position_after_b+leftover_length]
                                 print(leftover_equilavent)
+                                if "<b" in leftover_equilavent:
+                                    leftover_equilavent = self.headline[match_position_after_b:match_position_after_b+leftover_length+3].replace("<b>", "")
                                 if leftover == leftover_equilavent.lower():
                                     m = m+leftover_equilavent
                                     found = True
