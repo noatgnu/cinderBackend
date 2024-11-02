@@ -32,6 +32,19 @@ import cb
 #     from django.contrib.postgres.indexes import GinIndex
 #     from django.contrib.postgres.search import SearchVectorField, SearchHeadline
 
+def split_terms(input_term):
+    terms = input_term.lower().split("or")
+    term_dict = {}
+    for term in terms:
+        term = term.strip().replace("'", "").replace('"', "")
+
+        subterms = term.split("-")
+        if subterms[0] not in term_dict:
+            term_dict[subterms[0]] = []
+        term_dict[subterms[0]].append(term)
+
+    return term_dict
+
 class Abs(Func):
     function = 'ABS'
 
@@ -167,7 +180,7 @@ class ProjectFile(models.Model):
     def remove_file_content(self):
         self.file_contents.all().delete()
 
-    def get_search_items_from_headline(self) -> Optional[Dict[str, List[str]]]:
+    def get_search_items_from_headline(self, split_term_dict: Dict[str, List[str]]) -> Optional[Dict[str, List[str]]]:
         if getattr(self, "headline", None):
             #pattern = '(?<!\S)(?<!-|\w)(;)*<b>(.*?)</b>'
             pattern = r'<b>(.*?)</b>'
@@ -175,6 +188,33 @@ class ProjectFile(models.Model):
             for match in re.finditer(pattern, self.headline):
                 if match:
                     m = match.group(1)
+                    match_lower = m.lower()
+                    found = False
+                    if match_lower not in split_term_dict:
+                        continue
+                    term_length = len(m)
+                    for term in split_term_dict[match_lower]:
+                        if term == m:
+                            found = True
+                            break
+
+                        original_term_length = len(term)
+                        if original_term_length > len(m):
+                            leftover = term[term_length:]
+                            leftover_length = len(leftover)
+                            match_position_after_b = match.end(0)
+                            try:
+                                leftover_equilavent = self.headline[match_position_after_b:match_position_after_b+leftover_length]
+                                if leftover == leftover_equilavent.lower():
+                                    m = m+leftover_equilavent
+                                    found = True
+                                    break
+                            except IndexError:
+                                continue
+
+                    if not found:
+                        continue
+
                     print(match.group(0))
                     print(m)
                     if m not in term_contexts:
@@ -323,7 +363,7 @@ class SearchSession(models.Model):
             files = ProjectFile.objects.filter(analysis_group__in=self.analysis_groups.all(), file_category__in=["df"])
         else:
             files = ProjectFile.objects.filter(file_category__in=["df"])
-
+        search_dictionary = split_terms(self.search_term)
         search_query = SearchQuery(self.search_term, search_type='websearch')
         files = files.filter(
             file_contents__search_vector=search_query
@@ -337,7 +377,7 @@ class SearchSession(models.Model):
         for f in files:
             if f.id not in term_headline_file_dict:
                 term_headline_file_dict[f.id] = {'file': f, 'term_contexts': {}}
-            term_contexts = f.get_search_items_from_headline()
+            term_contexts = f.get_search_items_from_headline(search_dictionary)
             for t in term_contexts:
                 term = t.lower()
                 if term not in term_headline_file_dict[f.id]['term_contexts']:
