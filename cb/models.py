@@ -202,10 +202,12 @@ class ProjectFile(models.Model):
                         original_term_length = len(term)
                         if original_term_length > len(m):
                             leftover = term[term_length:]
+                            print(leftover)
                             leftover_length = len(leftover)
                             match_position_after_b = match.end(0)
                             try:
                                 leftover_equilavent = self.headline[match_position_after_b:match_position_after_b+leftover_length]
+                                print(leftover_equilavent)
                                 if leftover == leftover_equilavent.lower():
                                     m = m+leftover_equilavent
                                     found = True
