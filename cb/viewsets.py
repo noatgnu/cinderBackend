@@ -384,6 +384,7 @@ class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
         with file.file.open("rt") as f:
             data = pd.read_csv(f, sep=None)
             labels = data[column].unique()
+            labels = labels[~pd.isnull(labels)]
         return Response(list(labels), status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'])
