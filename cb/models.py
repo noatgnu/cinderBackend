@@ -796,6 +796,27 @@ class Species(models.Model):
         app_label = 'cb'
         ordering = ['official_name']
 
+class SubcellularLocation(models.Model):
+    """ A model to store UniProt subcellular location information"""
+    location_identifier = models.TextField(blank=True, null=True)
+    topology_identifier = models.TextField(blank=True, null=True)
+    orientation_identifier = models.TextField(blank=True, null=True)
+    accession = models.CharField(max_length=255, primary_key=True)
+    definition = models.TextField(blank=True, null=True)
+    synonyms = models.TextField(blank=True, null=True)
+    content = models.TextField(blank=True, null=True)
+    is_a = models.TextField(blank=True, null=True)
+    part_of = models.TextField(blank=True, null=True)
+    keyword = models.TextField(blank=True, null=True)
+    gene_ontology = models.TextField(blank=True, null=True)
+    annotation = models.TextField(blank=True, null=True)
+    references = models.TextField(blank=True, null=True)
+    links = models.TextField(blank=True, null=True)
+
+    class Meta:
+        app_label = 'cb'
+        ordering = ['accession']
+
 
 class CurtainData(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1182,6 +1203,38 @@ class LabGroup(models.Model):
         ordering = ['created_at']
         app_label = 'cb'
 
+class SourceFile(models.Model):
+    """
+    A model to store source files.
+    """
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    file = models.FileField(upload_to='source_files', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='source_files', blank=True, null=True)
+    analysis_group = models.ForeignKey(AnalysisGroup, on_delete=models.CASCADE, related_name='source_files', blank=True, null=True)
+
+    class Meta:
+        ordering = ['created_at']
+        app_label = 'cb'
+
+class MetadataColumn(models.Model):
+    name = models.CharField(max_length=255)
+    type = models.CharField(max_length=255)
+    column_position = models.IntegerField(blank=True, null=True, default=0)
+    value = models.TextField(blank=True, null=True)
+    analysis_group = models.ForeignKey(AnalysisGroup, on_delete=models.CASCADE, related_name='metadata_columns', blank=True, null=True)
+    source_file = models.ForeignKey(SourceFile, on_delete=models.CASCADE, related_name='metadata_columns', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['column_position']
+        app_label = 'cb'
+
+    def __str__(self):
+        return self.name
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):

@@ -6,7 +6,7 @@ from idlelib.query import Query
 import pandas as pd
 from django.contrib.postgres.search import SearchQuery, SearchHeadline
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
-from django.db.models import Q
+from django.db.models import Q, Max
 from django.http import HttpResponse
 from django.contrib.auth.models import User
 from django_filters import filters
@@ -25,11 +25,11 @@ from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysi
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
-    SearchSession, Species, CurtainData, Abs, Collate, CollateTag, LabGroup
+    SearchSession, Species, CurtainData, Abs, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
     SpeciesSerializer, CurtainDataSerializer, CollateSerializers, CollateTagSerializer, UserSerializer, \
-    LabGroupSerializer
+    LabGroupSerializer, SourceFileSerializer, MetadataColumnSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -859,7 +859,7 @@ class CollateTagViewSet(viewsets.ModelViewSet, FilterMixin):
         return Response(status=status.HTTP_200_OK)
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = UserSerializer
     queryset = User.objects.all()
     permission_classes = [permissions.IsAuthenticated]
@@ -958,7 +958,7 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"token": token}, status=status.HTTP_200_OK)
 
-class LabGroupViewSet(viewsets.ModelViewSet):
+class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer
     queryset = LabGroup.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -1024,3 +1024,186 @@ class LabGroupViewSet(viewsets.ModelViewSet):
         lab_group.members.remove(user)
         lab_group.save()
         return Response(LabGroupSerializer(lab_group).data, status=status.HTTP_200_OK)
+
+class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
+    serializer_class = SourceFileSerializer
+    queryset = SourceFile.objects.all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'name', 'created_at']
+    search_fields = ['name']
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+    def create(self, request, *args, **kwargs):
+        if "analysis_group" not in request.data:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        analysis_group = AnalysisGroup.objects.get(id=request.data['analysis_group'])
+        if analysis_group.project.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+
+        source_file = SourceFile(user=request.user, analysis_group=analysis_group)
+        if 'name' in request.data:
+            source_file.name = request.data['name']
+        if 'description' in request.data:
+            source_file.description = request.data['description']
+        data = SourceFileSerializer(source_file).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        source_file = self.get_object()
+        fields = ['name', 'description']
+        for i in request.data:
+            if i in fields:
+                setattr(source_file, i, request.data[i])
+        source_file.save()
+
+        return Response(SourceFileSerializer(source_file).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        source_file = self.get_object()
+        if source_file.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+        source_file.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
+    serializer_class = MetadataColumnSerializer
+    queryset = MetadataColumn.objects.all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['id', 'name', 'created_at']
+    search_fields = ['name']
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+    def create(self, request, *args, **kwargs):
+        if "analysis_group" not in request.data:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        analysis_group = AnalysisGroup.objects.get(id=request.data['analysis_group'])
+        if analysis_group.project.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+
+        metadata_column = dict(user=request.user, analysis_group=analysis_group)
+        if 'name' in request.data:
+            metadata_column.name = request.data['name']
+
+
+        if 'type' in request.data:
+            metadata_column["type"] = request.data['type']
+        if 'value' in request.data:
+            metadata_column["value"] = request.data['value']
+
+        # get the last position in the metadata columns group by checking all the metadata columns of the sourcefiles in the analysis group and see the max position value
+        max_column_position = MetadataColumn.objects.filter(
+            source_file__analysis_group=analysis_group).aggregate(Max('column_position'))[
+            'column_position__max']
+        if max_column_position is None:
+            position = 0
+        else:
+            position = max_column_position + 1
+        source_files = SourceFile.objects.filter(analysis_group=analysis_group)
+        if source_files.exists():
+            columns = []
+            for source_file in source_files:
+                metadata_column["source_file"] = source_file
+                metadata_column["column_position"] = position
+                metadata_column = MetadataColumn.objects.create(**metadata_column)
+                columns.append(metadata_column)
+            data = MetadataColumnSerializer(columns, many=True).data
+            return Response(data, status=status.HTTP_201_CREATED)
+        else:
+            metadata_column["column_position"] = position
+            metadata_column = MetadataColumn.objects.create(**metadata_column)
+            data = MetadataColumnSerializer(metadata_column).data
+            return Response([data], status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        metadata_column = self.get_object()
+        fields = ['name', 'description']
+        for i in request.data:
+            if i in fields:
+                setattr(metadata_column, i, request.data[i])
+        metadata_column.save()
+
+        return Response(MetadataColumnSerializer(metadata_column).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        metadata_column = self.get_object()
+        if metadata_column.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+        metadata_column.value = None
+        metadata_column.save()
+        # check if all source_file in this analysis_group all have metadata_column.value at this column_position
+        source_files = SourceFile.objects.filter(analysis_group=metadata_column.analysis_group)
+        if source_files.exists():
+            metadata_colums_same_position = MetadataColumn.objects.filter(analysis_group=metadata_column.analysis_group, column_position=metadata_column.column_position, source_file__in=source_files)
+            # check if any of the metadata_column has value
+            if metadata_colums_same_position.filter(~Q(value=None)).exists():
+                metadata_colums_same_position.delete()
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            else:
+                return Response(status=status.HTTP_204_NO_CONTENT)
+        else:
+            metadata_column.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def empty_all_value_in_column(self, request, pk=None):
+        metadata_column = self.get_object()
+        if metadata_column.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+
+        source_files = SourceFile.objects.filter(analysis_group=metadata_column.analysis_group)
+        if source_files.exists():
+            metadata_colums_same_position = MetadataColumn.objects.filter(analysis_group=metadata_column.analysis_group,
+                                                                          column_position=metadata_column.column_position,
+                                                                          source_file__in=source_files)
+            metadata_colums_same_position.update(value=None)
+            data = MetadataColumnSerializer(metadata_colums_same_position, many=True).data
+            return Response(data, status=status.HTTP_200_OK)
+        else:
+            metadata_column.value = None
+            metadata_column.save()
+            data = MetadataColumnSerializer(metadata_column).data
+            return Response([data], status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def reorganize_column(self, request, pk=None):
+        metadata_column = self.get_object()
+        if metadata_column.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+        objects = []
+        for i in request.data:
+            origin_position = i['origin_position']
+            destination_position = i['destination_position']
+            source_files = SourceFile.objects.filter(analysis_group=metadata_column.analysis_group)
+            if source_files.exists():
+                metadata_colums_same_position = MetadataColumn.objects.filter(analysis_group=metadata_column.analysis_group,
+                                                                              column_position=origin_position,
+                                                                              source_file__in=source_files)
+                for column in metadata_colums_same_position:
+                    column.column_position = destination_position
+                    objects.append(column)
+        if objects:
+            MetadataColumn.objects.bulk_update(objects, ['column_position'])
+            data = MetadataColumnSerializer(objects, many=True).data
+            return Response(data, status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+

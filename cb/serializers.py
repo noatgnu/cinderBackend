@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
-    SearchSession, Species, CurtainData, Collate, CollateTag, LabGroup
+    SearchSession, Species, CurtainData, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -175,3 +175,14 @@ class LabGroupSerializer(serializers.ModelSerializer):
         model = LabGroup
         fields = ['id', 'name', 'created_at', 'updated_at', 'managers']
 
+
+class SourceFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SourceFile
+        fields = ["id", "name", "description", "file", "created_at", "updated_at", "user", "analysis_group"]
+
+
+class MetadataColumnSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MetadataColumn
+        fields = ["id", "name", "type", "column_position", "value", "analysis_group", "source_file", "created_at", "updated_at"]
