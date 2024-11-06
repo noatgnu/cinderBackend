@@ -5,7 +5,8 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
-    SearchSession, Species, CurtainData, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn
+    SearchSession, Species, CurtainData, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn, SubcellularLocation, \
+    Tissue, HumanDisease
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -21,9 +22,24 @@ class ProjectFileSerializer(serializers.ModelSerializer):
 
 
 class AnalysisGroupSerializer(serializers.ModelSerializer):
+    metadata_columns = serializers.SerializerMethodField()
+    source_files = serializers.SerializerMethodField()
+
+    def get_metadata_columns(self, analysis_group):
+        if analysis_group.metadata_columns:
+            return MetadataColumnSerializer([i for i in analysis_group.metadata_columns.all()], many=True).data
+        else:
+            return []
+
+    def get_source_files(self, analysis_group):
+        if analysis_group.source_files:
+            return [i for i in analysis_group.source_files.all()]
+        else:
+            return []
+
     class Meta:
         model = AnalysisGroup
-        fields = ['id', 'name', 'description', 'project', 'created_at', 'updated_at', 'analysis_group_type', 'curtain_link']
+        fields = ['id', 'name', 'description', 'project', 'created_at', 'updated_at', 'analysis_group_type', 'curtain_link', 'metadata_columns', 'source_files']
 
 
 class SampleAnnotationSerializer(serializers.ModelSerializer):
@@ -186,3 +202,18 @@ class MetadataColumnSerializer(serializers.ModelSerializer):
     class Meta:
         model = MetadataColumn
         fields = ["id", "name", "type", "column_position", "value", "analysis_group", "source_file", "created_at", "updated_at"]
+
+class SubcellularLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubcellularLocation
+        fields = ['location_identifier', 'topology_identifier', 'orientation_identifier', 'accession', 'definition', 'synonyms', 'content', 'is_a', 'part_of', 'keyword', 'gene_ontology', 'annotation', 'references', 'links']
+
+class TissueSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tissue
+        fields = ["identifier", "accession", "synonyms", "cross_references"]
+
+class HumanDiseaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HumanDisease
+        fields = ["identifier", "acronym", "accession", "synonyms", "cross_references", "definition", "keywords"]

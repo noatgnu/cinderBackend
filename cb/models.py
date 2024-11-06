@@ -1236,6 +1236,38 @@ class MetadataColumn(models.Model):
     def __str__(self):
         return self.name
 
+class Tissue(models.Model):
+    """Storing unique vocabulary of tissues from uniprot"""
+    identifier = models.CharField(max_length=255, primary_key=True)
+    accession = models.CharField(max_length=255)
+    synonyms = models.TextField(blank=True, null=True)
+    cross_references = models.TextField(blank=True, null=True)
+
+    class Meta:
+        app_label = 'cb'
+        ordering = ['identifier']
+
+    def __str__(self):
+        return self.identifier
+
+class HumanDisease(models.Model):
+    """Storing unique vocabulary of human diseases from uniprot"""
+    identifier = models.CharField(max_length=255, primary_key=True)
+    acronym = models.CharField(max_length=255, blank=True, null=True)
+    accession = models.CharField(max_length=255)
+    definition = models.TextField(blank=True, null=True)
+    synonyms = models.TextField(blank=True, null=True)
+    cross_references = models.TextField(blank=True, null=True)
+    keywords = models.TextField(blank=True, null=True)
+
+    class Meta:
+        app_label = 'cb'
+        ordering = ['identifier']
+
+    def __str__(self):
+        return self.identifier
+
+
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):
     if created:

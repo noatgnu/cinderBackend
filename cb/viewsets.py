@@ -25,11 +25,13 @@ from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysi
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
-    SearchSession, Species, CurtainData, Abs, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn
+    SearchSession, Species, CurtainData, Abs, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn, \
+    SubcellularLocation, Tissue, HumanDisease
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
     SpeciesSerializer, CurtainDataSerializer, CollateSerializers, CollateTagSerializer, UserSerializer, \
-    LabGroupSerializer, SourceFileSerializer, MetadataColumnSerializer
+    LabGroupSerializer, SourceFileSerializer, MetadataColumnSerializer, SubcellularLocationSerializer, TissueSerializer, \
+    HumanDiseaseSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -711,6 +713,49 @@ class SpeciesViewSet(viewsets.ModelViewSet, FilterMixin):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class SubcellularLocationViewSet(viewsets.ModelViewSet, FilterMixin):
+    serializer_class = SubcellularLocationSerializer
+    queryset = SubcellularLocation.objects.all()
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    pagination_class = LimitOffsetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['location_identifier', 'synonyms']
+    search_fields = ['^location_identifier', '^synonyms']
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+
+class TissueViewSet(viewsets.ModelViewSet, FilterMixin):
+    serializer_class = TissueSerializer
+    queryset = Tissue.objects.all()
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    pagination_class = LimitOffsetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['identifier', 'synonyms']
+    search_fields = ['^identifier', '^synonyms']
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+
+class HumanDiseaseViewSet(viewsets.ModelViewSet, FilterMixin):
+    serializer_class = HumanDiseaseSerializer
+    queryset = HumanDisease.objects.all()
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    pagination_class = LimitOffsetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['identifier', 'synonyms']
+    search_fields = ['^identifier', '^synonyms', 'acronym']
+
+    def get_queryset(self):
+        return super().get_queryset()
 
 class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = CollateSerializers
@@ -1096,9 +1141,9 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
             if not request.user.is_staff:
                 return Response(status=status.HTTP_403_FORBIDDEN)
 
-        metadata_column = dict(user=request.user, analysis_group=analysis_group)
+        metadata_column = dict(analysis_group=analysis_group)
         if 'name' in request.data:
-            metadata_column.name = request.data['name']
+            metadata_column['name'] = request.data['name']
 
 
         if 'type' in request.data:
@@ -1142,7 +1187,7 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         metadata_column = self.get_object()
-        if metadata_column.user != request.user:
+        if metadata_column.analysis_group.project.user != request.user:
             if not request.user.is_staff:
                 return Response(status=status.HTTP_403_FORBIDDEN)
         metadata_column.value = None
@@ -1164,7 +1209,7 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def empty_all_value_in_column(self, request, pk=None):
         metadata_column = self.get_object()
-        if metadata_column.user != request.user:
+        if metadata_column.analysis_group.project.user != request.user:
             if not request.user.is_staff:
                 return Response(status=status.HTTP_403_FORBIDDEN)
 
@@ -1185,7 +1230,7 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reorganize_column(self, request, pk=None):
         metadata_column = self.get_object()
-        if metadata_column.user != request.user:
+        if metadata_column.analysis_group.project.user != request.user:
             if not request.user.is_staff:
                 return Response(status=status.HTTP_403_FORBIDDEN)
         objects = []

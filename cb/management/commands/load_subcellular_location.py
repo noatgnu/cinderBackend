@@ -71,8 +71,8 @@ def parse_subcellular_location_file(filename=None):
                 if not entry.links:
                     entry.links = ""
                 entry.links += (line[5:].strip() + "; ")
-        if not isinstance(file, list):
-            file.close()
+    if not isinstance(file, list):
+        file.close()
 
     return entries
 
@@ -80,8 +80,9 @@ class Command(BaseCommand):
     help = 'Load UniProt controlled vocabulary subcellular location data into the database.'
 
     def add_arguments(self, parser):
-        parser.add_argument('file', type=str, help='The path to the species data file.')
+        parser.add_argument('file', type=str, nargs='?',  help='The path to the species data file.')
 
     def handle(self, *args, **options):
-        file_path = options['file']
+        file_path = options.get('file')
+        SubcellularLocation.objects.all().delete()
         parse_subcellular_location_file(file_path)

@@ -23,7 +23,8 @@ from cb.models import LabGroup
 from cb.views import DataChunkedUploadView, LogoutView, FrontEndTemplateView
 from cb.viewsets import ProjectViewSet, ProjectFileViewSet, AnalysisGroupViewSet, SampleAnnotationViewSet, \
     ComparisonMatrixViewSet, SearchResultViewSet, SearchSessionViewSet, SpeciesViewSet, CollateViewSet, \
-    CollateTagViewSet, UserViewSet, LabGroupViewSet
+    CollateTagViewSet, UserViewSet, LabGroupViewSet, TissueViewSet, SubcellularLocationViewSet, HumanDiseaseViewSet, \
+    MetadataColumnViewSet
 
 router = routers.DefaultRouter()
 router.register(r'projects', ProjectViewSet)
@@ -38,6 +39,10 @@ router.register(r"collates", CollateViewSet)
 router.register(r"collate_tags", CollateTagViewSet)
 router.register(r"users", UserViewSet)
 router.register(r"lab_groups", LabGroupViewSet)
+router.register(r"tissues", TissueViewSet)
+router.register(r"subcellular_locations", SubcellularLocationViewSet)
+router.register(r"human_diseases", HumanDiseaseViewSet)
+router.register(r"metadata_columns", MetadataColumnViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
