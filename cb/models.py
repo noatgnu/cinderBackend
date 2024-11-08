@@ -1219,6 +1219,11 @@ class SourceFile(models.Model):
         ordering = ['created_at']
         app_label = 'cb'
 
+    def delete(self, using=None, keep_parents=False):
+        if self.file:
+            self.file.delete()
+        super().delete(using, keep_parents)
+
 class MetadataColumn(models.Model):
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=255)

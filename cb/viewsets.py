@@ -1076,7 +1076,7 @@ class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     authentication_classes = [TokenAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filter_backends = [SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'name', 'created_at']
     search_fields = ['name']
 
@@ -1098,6 +1098,14 @@ class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
         if 'description' in request.data:
             source_file.description = request.data['description']
         source_file.save()
+        #check if there is any metadatacolumn belonging to any other sourcefile in the same analysis group. If there is, create the same number of metadatacolumn with the same name and type and position for this new sourcefile
+        #get a neighboring sourcefile in the same analysis group
+        neighboring_source_file = SourceFile.objects.filter(analysis_group=analysis_group).exclude(id=source_file.id).first()
+        if neighboring_source_file:
+            metadata_columns = MetadataColumn.objects.filter(source_file=neighboring_source_file)
+            for metadata_column in metadata_columns:
+                column = MetadataColumn.objects.create(analysis_group=analysis_group, source_file=source_file, name=metadata_column.name, type=metadata_column.type, column_position=metadata_column.column_position)
+
         data = SourceFileSerializer(source_file).data
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -1113,7 +1121,7 @@ class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         source_file = self.get_object()
-        if source_file.user != request.user:
+        if source_file.user != request.user and source_file.analysis_group.project.user != request.user:
             if not request.user.is_staff:
                 return Response(status=status.HTTP_403_FORBIDDEN)
         source_file.delete()
@@ -1138,6 +1146,7 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
         analysis_group = AnalysisGroup.objects.get(id=request.data['analysis_group'])
+        source_file = request.data.get('source_file', None)
         if analysis_group.project.user != request.user:
             if not request.user.is_staff:
                 return Response(status=status.HTTP_403_FORBIDDEN)
@@ -1152,29 +1161,35 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
         if 'value' in request.data:
             metadata_column["value"] = request.data['value']
 
+
         # get the last position in the metadata columns group by checking all the metadata columns of the sourcefiles in the analysis group and see the max position value
-        max_column_position = MetadataColumn.objects.filter(
-            source_file__analysis_group=analysis_group).aggregate(Max('column_position'))[
+        if not source_file:
+            max_column_position = MetadataColumn.objects.filter(source_file__isnull=True).aggregate(Max('column_position'))['column_position__max']
+        else:
+            max_column_position = MetadataColumn.objects.filter(source_file__isnull=False).aggregate(Max('column_position'))[
             'column_position__max']
         if max_column_position is None:
             position = 0
         else:
             position = max_column_position + 1
-        source_files = SourceFile.objects.filter(analysis_group=analysis_group)
-        if source_files.exists():
-            columns = []
-            for source_file in source_files:
-                metadata_column["source_file"] = source_file
-                metadata_column["column_position"] = position
-                metadata_column = MetadataColumn.objects.create(**metadata_column)
-                columns.append(metadata_column)
-            data = MetadataColumnSerializer(columns, many=True).data
-            return Response(data, status=status.HTTP_201_CREATED)
-        else:
+        if not source_file:
             metadata_column["column_position"] = position
             metadata_column = MetadataColumn.objects.create(**metadata_column)
             data = MetadataColumnSerializer(metadata_column).data
             return Response([data], status=status.HTTP_201_CREATED)
+        else:
+            source_files = SourceFile.objects.filter(analysis_group=analysis_group)
+            if source_files.exists():
+                columns = []
+                for s in source_files:
+                    metadata_column["source_file"] = s
+                    metadata_column["column_position"] = position
+                    metadata_column = MetadataColumn.objects.create(**metadata_column)
+                    columns.append(metadata_column)
+                data = MetadataColumnSerializer(columns, many=True).data
+                return Response(data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, *args, **kwargs):
         metadata_column = self.get_object()

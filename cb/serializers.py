@@ -27,7 +27,10 @@ class AnalysisGroupSerializer(serializers.ModelSerializer):
 
     def get_metadata_columns(self, analysis_group):
         if analysis_group.metadata_columns:
-            return MetadataColumnSerializer([i for i in analysis_group.metadata_columns.all()], many=True).data
+            metadata_columns = [i for i in analysis_group.metadata_columns.all() if not i.source_file]
+            if metadata_columns:
+                return MetadataColumnSerializer(metadata_columns, many=True).data
+            return []
         else:
             return []
 
@@ -193,9 +196,17 @@ class LabGroupSerializer(serializers.ModelSerializer):
 
 
 class SourceFileSerializer(serializers.ModelSerializer):
+    metadata_columns = serializers.SerializerMethodField()
+
+    def get_metadata_columns(self, source_file):
+        if source_file.metadata_columns:
+            return MetadataColumnSerializer([i for i in source_file.metadata_columns.all()], many=True).data
+        else:
+            return []
+
     class Meta:
         model = SourceFile
-        fields = ["id", "name", "description", "file", "created_at", "updated_at", "user", "analysis_group"]
+        fields = ["id", "name", "description", "file", "created_at", "updated_at", "user", "analysis_group", "metadata_columns"]
 
 
 class MetadataColumnSerializer(serializers.ModelSerializer):
