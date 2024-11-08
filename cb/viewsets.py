@@ -752,7 +752,7 @@ class HumanDiseaseViewSet(viewsets.ModelViewSet, FilterMixin):
     pagination_class = LimitOffsetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['identifier', 'synonyms']
-    search_fields = ['^identifier', '^synonyms', 'acronym']
+    search_fields = ['^identifier', '^synonyms', '^acronym']
 
     def get_queryset(self):
         return super().get_queryset()
@@ -1097,6 +1097,7 @@ class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
             source_file.name = request.data['name']
         if 'description' in request.data:
             source_file.description = request.data['description']
+        source_file.save()
         data = SourceFileSerializer(source_file).data
         return Response(data, status=status.HTTP_201_CREATED)
 

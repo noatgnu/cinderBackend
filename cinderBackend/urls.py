@@ -24,7 +24,7 @@ from cb.views import DataChunkedUploadView, LogoutView, FrontEndTemplateView
 from cb.viewsets import ProjectViewSet, ProjectFileViewSet, AnalysisGroupViewSet, SampleAnnotationViewSet, \
     ComparisonMatrixViewSet, SearchResultViewSet, SearchSessionViewSet, SpeciesViewSet, CollateViewSet, \
     CollateTagViewSet, UserViewSet, LabGroupViewSet, TissueViewSet, SubcellularLocationViewSet, HumanDiseaseViewSet, \
-    MetadataColumnViewSet
+    MetadataColumnViewSet, SourceFileViewSet
 
 router = routers.DefaultRouter()
 router.register(r'projects', ProjectViewSet)
@@ -43,6 +43,7 @@ router.register(r"tissues", TissueViewSet)
 router.register(r"subcellular_locations", SubcellularLocationViewSet)
 router.register(r"human_diseases", HumanDiseaseViewSet)
 router.register(r"metadata_columns", MetadataColumnViewSet)
+router.register(r"source_files", SourceFileViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

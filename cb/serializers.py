@@ -33,7 +33,7 @@ class AnalysisGroupSerializer(serializers.ModelSerializer):
 
     def get_source_files(self, analysis_group):
         if analysis_group.source_files:
-            return [i for i in analysis_group.source_files.all()]
+            return SourceFileSerializer([i for i in analysis_group.source_files.all()], many=True).data
         else:
             return []
 
