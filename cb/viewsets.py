@@ -282,6 +282,22 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         else:
             return Response({"edit": False}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'])
+    def reorganize_column(self, request, pk=None):
+        analysis_group = self.get_object()
+        if analysis_group.project.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+        objects = []
+        id_positions_list = request.data['positions']
+        columns_in_analysis_group = MetadataColumn.objects.filter(analysis_group=analysis_group)
+        for i in id_positions_list:
+            column = columns_in_analysis_group.get(id=i['id'])
+            column.column_position = i['column_position']
+            objects.append(column)
+        MetadataColumn.objects.bulk_update(objects, ['column_position'])
+        return Response(status=status.HTTP_200_OK)
+
 
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ProjectFileSerializer
@@ -1257,28 +1273,5 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
             data = MetadataColumnSerializer(metadata_column).data
             return Response([data], status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'])
-    def reorganize_column(self, request, pk=None):
-        metadata_column = self.get_object()
-        if metadata_column.analysis_group.project.user != request.user:
-            if not request.user.is_staff:
-                return Response(status=status.HTTP_403_FORBIDDEN)
-        objects = []
-        for i in request.data:
-            origin_position = i['origin_position']
-            destination_position = i['destination_position']
-            source_files = SourceFile.objects.filter(analysis_group=metadata_column.analysis_group)
-            if source_files.exists():
-                metadata_colums_same_position = MetadataColumn.objects.filter(analysis_group=metadata_column.analysis_group,
-                                                                              column_position=origin_position,
-                                                                              source_file__in=source_files)
-                for column in metadata_colums_same_position:
-                    column.column_position = destination_position
-                    objects.append(column)
-        if objects:
-            MetadataColumn.objects.bulk_update(objects, ['column_position'])
-            data = MetadataColumnSerializer(objects, many=True).data
-            return Response(data, status=status.HTTP_200_OK)
-        else:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+
 
