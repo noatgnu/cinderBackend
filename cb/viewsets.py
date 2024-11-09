@@ -1158,30 +1158,30 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
             if not request.user.is_staff:
                 return Response(status=status.HTTP_403_FORBIDDEN)
 
-        metadata_column = dict(analysis_group=analysis_group)
-        if 'name' in request.data:
-            metadata_column['name'] = request.data['name']
-
-
-        if 'type' in request.data:
-            metadata_column["type"] = request.data['type']
-        if 'value' in request.data:
-            metadata_column["value"] = request.data['value']
-
+        metadata_column_data = {
+            'analysis_group': analysis_group,
+            'name': request.data.get('name'),
+            'type': request.data.get('type'),
+            'value': request.data.get('value')
+        }
 
         # get the last position in the metadata columns group by checking all the metadata columns of the sourcefiles in the analysis group and see the max position value
         if not source_file:
-            max_column_position = MetadataColumn.objects.filter(source_file__isnull=True).aggregate(Max('column_position'))['column_position__max']
+            max_column_position = \
+            MetadataColumn.objects.filter(source_file__isnull=True).aggregate(Max('column_position'))[
+                'column_position__max']
         else:
-            max_column_position = MetadataColumn.objects.filter(source_file__isnull=False).aggregate(Max('column_position'))[
-            'column_position__max']
+            max_column_position = \
+            MetadataColumn.objects.filter(source_file__isnull=False).aggregate(Max('column_position'))[
+                'column_position__max']
         if max_column_position is None:
             position = 0
         else:
             position = max_column_position + 1
+
         if not source_file:
-            metadata_column["column_position"] = position
-            metadata_column = MetadataColumn.objects.create(**metadata_column)
+            metadata_column_data["column_position"] = position
+            metadata_column = MetadataColumn.objects.create(**metadata_column_data)
             data = MetadataColumnSerializer(metadata_column).data
             return Response([data], status=status.HTTP_201_CREATED)
         else:
@@ -1189,18 +1189,23 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
             if source_files.exists():
                 columns = []
                 for s in source_files:
-                    metadata_column["source_file"] = s
-                    metadata_column["column_position"] = position
-                    metadata_column = MetadataColumn.objects.create(**metadata_column)
+                    metadata_column = MetadataColumn()
+                    metadata_column.source_file = s
+                    metadata_column.analysis_group = analysis_group
+                    metadata_column.column_position = position
+                    metadata_column.name = metadata_column_data['name']
+                    metadata_column.type = metadata_column_data['type']
+                    if int(source_file) == s.id:
+                        metadata_column.value = metadata_column_data['value']
                     columns.append(metadata_column)
-                data = MetadataColumnSerializer(columns, many=True).data
+                result = MetadataColumn.objects.bulk_create(columns)
+                data = MetadataColumnSerializer(result, many=True).data
                 return Response(data, status=status.HTTP_201_CREATED)
             else:
                 return Response(status=status.HTTP_400_BAD_REQUEST)
-
     def update(self, request, *args, **kwargs):
         metadata_column = self.get_object()
-        fields = ['name', 'description']
+        fields = ['name', 'description', 'value']
         for i in request.data:
             if i in fields:
                 setattr(metadata_column, i, request.data[i])
