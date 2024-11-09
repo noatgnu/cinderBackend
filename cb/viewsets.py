@@ -1224,12 +1224,14 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
         source_files = SourceFile.objects.filter(analysis_group=metadata_column.analysis_group)
         if source_files.exists():
             metadata_colums_same_position = MetadataColumn.objects.filter(analysis_group=metadata_column.analysis_group, column_position=metadata_column.column_position, source_file__in=source_files)
-            # check if any of the metadata_column has value
-            if metadata_colums_same_position.filter(~Q(value=None)).exists():
+            if metadata_colums_same_position.exists():
                 metadata_colums_same_position.delete()
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            else:
-                return Response(status=status.HTTP_204_NO_CONTENT)
+            # update the column position of the metadata columns with column_position greater than the deleted column_position
+            metadata_column_greater_position = MetadataColumn.objects.filter(analysis_group=metadata_column.analysis_group, column_position__gt=metadata_column.column_position, source_file__in=source_files)
+            for column in metadata_column_greater_position:
+                column.column_position -= 1
+            MetadataColumn.objects.bulk_update(metadata_column_greater_position, ['column_position'])
+            return Response(status=status.HTTP_204_NO_CONTENT)
         else:
             metadata_column.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
