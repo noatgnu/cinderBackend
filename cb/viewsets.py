@@ -986,9 +986,9 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
                 user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name)
                 user.set_password(password)
                 if 'lab_group' in request.data:
-                    lab_groups = LabGroup.objects.get(id__in=request.data['lab_group'])
-                    user.lab_groups.add(*lab_groups)
-
+                    lab_groups = LabGroup.objects.filter(id__in=request.data['lab_group'])
+                    for lab_group in lab_groups:
+                        lab_group.members.add(user)
                 user.save()
                 return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
             else:
