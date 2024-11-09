@@ -1053,12 +1053,13 @@ class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def add_member(self, request, pk=None):
-        if not self.request.user.is_staff:
-            if not self.request.user in self.get_object().managing_members.all():
-                return Response(status=status.HTTP_403_FORBIDDEN)
-        lab_group = self.get_object()
         user_id = request.data['user']
         user = User.objects.get(id=user_id)
+        if self.request.user != user:
+            if not self.request.user.is_staff:
+                if not self.request.user in self.get_object().managing_members.all():
+                    return Response(status=status.HTTP_403_FORBIDDEN)
+        lab_group = self.get_object()
         lab_group.members.add(user)
         lab_group.save()
         return Response(LabGroupSerializer(lab_group).data, status=status.HTTP_200_OK)
