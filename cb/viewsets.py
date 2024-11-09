@@ -946,6 +946,12 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
         return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
 
     def destroy(self, request, *args, **kwargs):
+        if request.user.is_staff:
+            object = self.get_object()
+            if object.is_staff:
+                return Response({'detail': 'Cannot delete staff user.'}, status=status.HTTP_400_BAD_REQUEST)
+            object.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
         return Response({'detail': 'Method not allowed.'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
     @action(detail=False, methods=['get'])
