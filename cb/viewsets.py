@@ -298,6 +298,36 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         MetadataColumn.objects.bulk_update(objects, ['column_position'])
         return Response(status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['get'])
+    def export_sdrf(self, request, pk=None):
+        analysis_group = self.get_object()
+        source_files = SourceFile.objects.filter(analysis_group=analysis_group)
+        columns = MetadataColumn.objects.filter(analysis_group=analysis_group, source_file__in=source_files)
+        unique_column_position_sorted = columns.values('column_position').distinct().order_by('column_position')
+        source_file_column_position_column_map = {}
+        column_header_map = {}
+        for c in columns:
+            if c.source_file.id not in source_file_column_position_column_map:
+                source_file_column_position_column_map[c.source_file.id] = {}
+            if c.column_position not in column_header_map:
+                column_header_map[c.column_position] = f"{c.type}[{c.name}]".lower()
+            source_file_column_position_column_map[c.source_file.id][c.column_position] = c
+        sdrf = []
+
+        for s in source_files:
+            row = [s.name]
+            for c in unique_column_position_sorted:
+                if c['column_position'] in source_file_column_position_column_map[s.id]:
+                    column = source_file_column_position_column_map[s.id][c['column_position']]
+                    row.append(column.column_name)
+                else:
+                    row.append("")
+            sdrf.append(row)
+
+        sdrf.insert(0, [f"sample name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
+        return Response(sdrf, status=status.HTTP_200_OK)
+
+
 
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ProjectFileSerializer
@@ -1272,6 +1302,3 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
             metadata_column.save()
             data = MetadataColumnSerializer(metadata_column).data
             return Response([data], status=status.HTTP_200_OK)
-
-
-

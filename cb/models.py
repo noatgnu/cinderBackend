@@ -217,9 +217,6 @@ class ProjectFile(models.Model):
 
                     if not found:
                         continue
-
-                    print(match.group(0))
-                    print(m)
                     if m not in term_contexts:
                         term_contexts[m] = []
                     start = match.start(0)
