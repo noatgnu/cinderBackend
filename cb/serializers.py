@@ -6,7 +6,7 @@ from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
     SearchSession, Species, CurtainData, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn, SubcellularLocation, \
-    Tissue, HumanDisease
+    Tissue, HumanDisease, MSUniqueVocabularies, Unimod
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -228,3 +228,13 @@ class HumanDiseaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = HumanDisease
         fields = ["identifier", "acronym", "accession", "synonyms", "cross_references", "definition", "keywords"]
+
+class MSUniqueVocabulariesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MSUniqueVocabularies
+        fields = ["accession", "name", "definition", "term_type"]
+
+class UnimodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Unimod
+        fields = ["accession", "name", "definition", "additional_data"]

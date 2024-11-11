@@ -1221,6 +1221,43 @@ class SourceFile(models.Model):
             self.file.delete()
         super().delete(using, keep_parents)
 
+    def initiate_default_columns(self):
+        default_columns = [{
+            "name": "Organism", "type": "Characteristics"
+        }, {
+            "name": "Tissue", "type": "Characteristics"
+        }, {
+            "name": "Disease", "type": "Characteristics"
+        }, {
+            "name": "Cell type", "type": "Characteristics"
+        }, {
+            "name": "Assay name", "type": "Characteristics"
+        }, {
+            "name": "Technology type", "type": ""
+        }, {
+            "name": "Material type", "type": ""
+        }, {"name": "Label", "type": "Comment"},
+            {"name": "Fraction identifier", "type": "Comment"},
+            {"name": "Instrument", "type": "Comment"},
+            {"name": "Data file", "type": "Comment"},
+            {"name": "Cleavage agent details", "type": "Comment"},
+            {"name": "Modification parameters", "type": "Comment"},
+            {"name": "Dissociation method", "type": "Comment"},
+            {"name": "Precursor mass tolerance", "type": "Comment"},
+            {"name": "Fragment mass tolerance", "type": "Comment"},
+        ]
+        for i, dc in enumerate(default_columns):
+            meta = MetadataColumn(
+                name=dc["name"],
+                type=dc["type"],
+                column_position=i,
+                source_file=self
+            )
+            if "value" in dc:
+                meta.value = dc["value"]
+            meta.save()
+
+
 class MetadataColumn(models.Model):
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=255)
@@ -1268,6 +1305,34 @@ class HumanDisease(models.Model):
 
     def __str__(self):
         return self.identifier
+
+class MSUniqueVocabularies(models.Model):
+    """Storing unique vocabulary of mass spectrometry from HUPO-PSI"""
+    accession = models.CharField(max_length=255, primary_key=True)
+    name = models.CharField(max_length=255)
+    definition = models.TextField(blank=True, null=True)
+    term_type = models.TextField(blank=True, null=True)
+
+    class Meta:
+        app_label = 'cb'
+        ordering = ['accession']
+
+    def __str__(self):
+        return self.accession
+
+class Unimod(models.Model):
+    """Storing unique vocabulary of mass spectrometry from Unimod"""
+    accession = models.CharField(max_length=255, primary_key=True)
+    name = models.CharField(max_length=255)
+    definition = models.TextField(blank=True, null=True)
+    additional_data = models.JSONField(blank=True, null=True)
+
+    class Meta:
+        app_label = 'cb'
+        ordering = ['accession']
+
+    def __str__(self):
+        return self.accession
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)

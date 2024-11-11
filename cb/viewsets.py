@@ -20,18 +20,20 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
+
+from cb.filters import UnimodFilter
 from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysis_group_from_curtain_data, \
     export_search_data
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
     SearchSession, Species, CurtainData, Abs, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn, \
-    SubcellularLocation, Tissue, HumanDisease
+    SubcellularLocation, Tissue, HumanDisease, MSUniqueVocabularies, Unimod
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
     SpeciesSerializer, CurtainDataSerializer, CollateSerializers, CollateTagSerializer, UserSerializer, \
     LabGroupSerializer, SourceFileSerializer, MetadataColumnSerializer, SubcellularLocationSerializer, TissueSerializer, \
-    HumanDiseaseSerializer
+    HumanDiseaseSerializer, MSUniqueVocabulariesSerializer, UnimodSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -310,21 +312,64 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
             if c.source_file.id not in source_file_column_position_column_map:
                 source_file_column_position_column_map[c.source_file.id] = {}
             if c.column_position not in column_header_map:
-                column_header_map[c.column_position] = f"{c.type}[{c.name}]".lower()
+                if c.name == "Tissue":
+                    column_header_map[c.column_position] = f"{c.type}[organism part]".lower()
+                else:
+                    column_header_map[c.column_position] = f"{c.type}[{c.name}]".lower()
             source_file_column_position_column_map[c.source_file.id][c.column_position] = c
         sdrf = []
 
         for s in source_files:
             row = [s.name]
             for c in unique_column_position_sorted:
-                if c['column_position'] in source_file_column_position_column_map[s.id]:
-                    column = source_file_column_position_column_map[s.id][c['column_position']]
-                    row.append(column.column_name)
+                if c.column_position in source_file_column_position_column_map[s.id]:
+                    column = source_file_column_position_column_map[s.id][c.column_position]
+                    row.append(column.value)
+                    if column.value:
+                        name = column.name.lower()
+                        if name == "organism":
+                            species = Species.objects.filter(official_name=column.value)
+                            if species.exists():
+                                row.append(f"http://purl.obolibrary.org/obo/NCBITaxon_{species.first().taxon}")
+                            else:
+                                row.append(column.value)
+                        elif name == "label":
+                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="sample attribute")
+                            if vocab.exists():
+                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                        elif name == "cleavage agent details":
+                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="cleavage agent")
+                            if vocab.exists():
+                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                        elif name == "instrument":
+                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="instrument")
+                            if vocab.exists():
+                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                        elif name == "modification parameters":
+                            unimod = Unimod.objects.filter(name=column.value)
+                            if unimod.exists():
+                                row.append(f"AC={unimod.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                        elif name == "dissociation method":
+                            dissociation = MSUniqueVocabularies.objects.filter(name=column.value, term_type="dissociation method")
+                            if dissociation.exists():
+                                row.append(f"AC={dissociation.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                    else:
+                        row.append("not applicable")
                 else:
-                    row.append("")
+                    row.append("not applicable")
             sdrf.append(row)
 
-        sdrf.insert(0, [f"sample name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
+        sdrf.insert(0, [f"source name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
         return Response(sdrf, status=status.HTTP_200_OK)
 
 
@@ -1158,7 +1203,9 @@ class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
             metadata_columns = MetadataColumn.objects.filter(source_file=neighboring_source_file)
             for metadata_column in metadata_columns:
                 column = MetadataColumn.objects.create(analysis_group=analysis_group, source_file=source_file, name=metadata_column.name, type=metadata_column.type, column_position=metadata_column.column_position)
-
+        else:
+            if analysis_group.analysis_group_type == "proteomics" or analysis_group.analysis_group_type == "ptm":
+                source_file.initiate_default_columns()
         data = SourceFileSerializer(source_file).data
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -1302,3 +1349,91 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
             metadata_column.save()
             data = MetadataColumnSerializer(metadata_column).data
             return Response([data], status=status.HTTP_200_OK)
+
+
+class MSUniqueVocabulariesViewSet(FilterMixin, viewsets.ModelViewSet):
+    serializer_class = MSUniqueVocabulariesSerializer
+    queryset = MSUniqueVocabularies.objects.all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    ordering_fields = ['accession', 'name']
+    search_fields = ['^name']
+    pagination_class = LimitOffsetPagination
+
+    def get_queryset(self):
+        term_type = self.request.query_params.get('term_type', None)
+        if term_type:
+            return self.queryset.filter(term_type=term_type)
+        return super().get_queryset()
+
+    def create(self, request, *args, **kwargs):
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        accession = request.data['accession']
+        name = request.data['name']
+        vocabulary = MSUniqueVocabularies.objects.create(accession=accession, name=name)
+        data = MSUniqueVocabulariesSerializer(vocabulary).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        vocabulary = self.get_object()
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if 'accession' in request.data:
+            vocabulary.accession = request.data['accession']
+        if 'name' in request.data:
+            vocabulary.name = request.data['name']
+        vocabulary.save()
+        return Response(MSUniqueVocabulariesSerializer(vocabulary).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        vocabulary = self.get_object()
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        vocabulary.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class UnimodViewSets(FilterMixin, viewsets.ModelViewSet):
+    serializer_class = UnimodSerializer
+    queryset = Unimod.objects.all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = (MultiPartParser, JSONParser)
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = UnimodFilter
+    ordering_fields = ['accession', 'name']
+    search_fields = ['^name']
+    pagination_class = LimitOffsetPagination
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+    def create(self, request, *args, **kwargs):
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        accession = request.data['accession']
+        name = request.data['name']
+        unimod = Unimod.objects.create(accession=accession, name=name)
+        data = UnimodSerializer(unimod).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        unimod = self.get_object()
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if 'accession' in request.data:
+            unimod.accession = request.data['accession']
+        if 'name' in request.data:
+            unimod.name = request.data['name']
+        unimod.save()
+        return Response(UnimodSerializer(unimod).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        unimod = self.get_object()
+        if not self.request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        unimod.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+

@@ -26,6 +26,7 @@ django-redis = "^5.4.0"
 django-dbbackup = "^4.1.0"
 gunicorn = "^22.0.0"
 curtainutils = "^0.1.16"
+pronto = "^2.5.8"
 
 
 [build-system]

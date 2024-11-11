@@ -19,12 +19,11 @@ from django.urls import path, include
 from rest_framework import routers
 from rest_framework.authtoken.views import obtain_auth_token
 
-from cb.models import LabGroup
 from cb.views import DataChunkedUploadView, LogoutView, FrontEndTemplateView
 from cb.viewsets import ProjectViewSet, ProjectFileViewSet, AnalysisGroupViewSet, SampleAnnotationViewSet, \
     ComparisonMatrixViewSet, SearchResultViewSet, SearchSessionViewSet, SpeciesViewSet, CollateViewSet, \
     CollateTagViewSet, UserViewSet, LabGroupViewSet, TissueViewSet, SubcellularLocationViewSet, HumanDiseaseViewSet, \
-    MetadataColumnViewSet, SourceFileViewSet
+    MetadataColumnViewSet, SourceFileViewSet, MSUniqueVocabulariesViewSet, UnimodViewSets
 
 router = routers.DefaultRouter()
 router.register(r'projects', ProjectViewSet)
@@ -44,6 +43,8 @@ router.register(r"subcellular_locations", SubcellularLocationViewSet)
 router.register(r"human_diseases", HumanDiseaseViewSet)
 router.register(r"metadata_columns", MetadataColumnViewSet)
 router.register(r"source_files", SourceFileViewSet)
+router.register(r"ms_vocab", MSUniqueVocabulariesViewSet)
+router.register(r"unimod", UnimodViewSets)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
