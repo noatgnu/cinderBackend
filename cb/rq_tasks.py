@@ -194,7 +194,6 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
     analysis_group = AnalysisGroup.objects.get(id=analysis_group_id)
     source_files = SourceFile.objects.filter(analysis_group=analysis_group)
     columns = MetadataColumn.objects.filter(analysis_group=analysis_group, source_file__in=source_files)
-    print(columns)
     unique_column_position_sorted = columns.values('column_position').distinct().order_by('column_position')
     source_file_column_position_column_map = {}
     column_header_map = {}
@@ -210,8 +209,6 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
                 column_header_map[c.column_position] = f"{c.type}[{c.name}]".lower()
         source_file_column_position_column_map[c.source_file.id][c.column_position] = c
     sdrf = []
-    print(column_header_map)
-    print(unique_column_position_sorted)
     for s in source_files:
         row = [s.name]
         for c in unique_column_position_sorted:
@@ -244,7 +241,8 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
                         else:
                             row.append(f"{column.value}")
                     elif name == "modification parameters":
-                        unimod = Unimod.objects.filter(name=column.value)
+                        splitted = column.value.split(";")
+                        unimod = Unimod.objects.filter(name=splitted[0])
                         if unimod.exists():
                             row.append(f"AC={unimod.first().accession};NT={column.value}")
                         else:
