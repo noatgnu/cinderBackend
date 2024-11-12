@@ -1231,7 +1231,10 @@ class SourceFile(models.Model):
         }, {
             "name": "Cell type", "type": "Characteristics"
         }, {
-            "name": "Assay name", "type": "Characteristics"
+            "name": "Biological replicate", "type": "Characteristics"
+        },
+            {
+                "name": "Assay name", "type": ""
         }, {
             "name": "Technology type", "type": ""
         }, {
