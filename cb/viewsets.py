@@ -1,18 +1,15 @@
 import csv
 import json
 import uuid
-from idlelib.query import Query
 
 import pandas as pd
-from django.contrib.postgres.search import SearchQuery, SearchHeadline
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.db.models import Q, Max
 from django.http import HttpResponse
 from django.contrib.auth.models import User
-from django_filters import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters.views import FilterMixin
-from drf_chunked_upload.models import ChunkedUpload, AUTH_USER_MODEL
+from drf_chunked_upload.models import ChunkedUpload
 from rest_framework import viewsets, permissions, status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import action
@@ -23,7 +20,7 @@ from rest_framework.response import Response
 
 from cb.filters import UnimodFilter
 from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysis_group_from_curtain_data, \
-    export_search_data
+    export_search_data, export_sdrf_task
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
@@ -300,79 +297,13 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         MetadataColumn.objects.bulk_update(objects, ['column_position'])
         return Response(status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['post'])
     def export_sdrf(self, request, pk=None):
         analysis_group = self.get_object()
-        source_files = SourceFile.objects.filter(analysis_group=analysis_group)
-        columns = MetadataColumn.objects.filter(analysis_group=analysis_group, source_file__in=source_files)
-        unique_column_position_sorted = columns.values('column_position').distinct().order_by('column_position')
-        source_file_column_position_column_map = {}
-        column_header_map = {}
-        for c in columns:
-            if c.source_file.id not in source_file_column_position_column_map:
-                source_file_column_position_column_map[c.source_file.id] = {}
-            if c.column_position not in column_header_map:
-                if c.name == "Tissue":
-                    column_header_map[c.column_position] = f"{c.type}[organism part]".lower()
-                else:
-                    column_header_map[c.column_position] = f"{c.type}[{c.name}]".lower()
-            source_file_column_position_column_map[c.source_file.id][c.column_position] = c
-        sdrf = []
-
-        for s in source_files:
-            row = [s.name]
-            for c in unique_column_position_sorted:
-                if c.column_position in source_file_column_position_column_map[s.id]:
-                    column = source_file_column_position_column_map[s.id][c.column_position]
-                    row.append(column.value)
-                    if column.value:
-                        name = column.name.lower()
-                        if name == "organism":
-                            species = Species.objects.filter(official_name=column.value)
-                            if species.exists():
-                                row.append(f"http://purl.obolibrary.org/obo/NCBITaxon_{species.first().taxon}")
-                            else:
-                                row.append(column.value)
-                        elif name == "label":
-                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="sample attribute")
-                            if vocab.exists():
-                                row.append(f"AC={vocab.first().accession};NT={column.value}")
-                            else:
-                                row.append(f"{column.value}")
-                        elif name == "cleavage agent details":
-                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="cleavage agent")
-                            if vocab.exists():
-                                row.append(f"AC={vocab.first().accession};NT={column.value}")
-                            else:
-                                row.append(f"{column.value}")
-                        elif name == "instrument":
-                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="instrument")
-                            if vocab.exists():
-                                row.append(f"AC={vocab.first().accession};NT={column.value}")
-                            else:
-                                row.append(f"{column.value}")
-                        elif name == "modification parameters":
-                            unimod = Unimod.objects.filter(name=column.value)
-                            if unimod.exists():
-                                row.append(f"AC={unimod.first().accession};NT={column.value}")
-                            else:
-                                row.append(f"{column.value}")
-                        elif name == "dissociation method":
-                            dissociation = MSUniqueVocabularies.objects.filter(name=column.value, term_type="dissociation method")
-                            if dissociation.exists():
-                                row.append(f"AC={dissociation.first().accession};NT={column.value}")
-                            else:
-                                row.append(f"{column.value}")
-                    else:
-                        row.append("not applicable")
-                else:
-                    row.append("not applicable")
-            sdrf.append(row)
-
-        sdrf.insert(0, [f"source name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
-        return Response(sdrf, status=status.HTTP_200_OK)
-
-
+        instance_id = request.data['session_id']
+        uuid_str = str(uuid.uuid4())
+        export_sdrf_task.delay(analysis_group.id, uuid_str, instance_id)
+        return Response({"job_id": uuid_str}, status=status.HTTP_200_OK)
 
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ProjectFileSerializer
@@ -750,6 +681,7 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
 
     @action(detail=False, methods=['get'])
     def download_temp_file(self, request):
+
         token = request.query_params.get('token', None)
         print(token)
         if not token:

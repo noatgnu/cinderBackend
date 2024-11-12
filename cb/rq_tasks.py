@@ -6,7 +6,7 @@ import uuid
 
 import pandas as pd
 from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
+from channels.layers import get_channel_layer, channel_layers
 from django.conf import settings
 from django.core.signing import TimestampSigner
 from django.db.models import Q
@@ -14,7 +14,8 @@ from django_rq import job
 from rq.job import Job
 import re
 
-from cb.models import SearchSession, AnalysisGroup, CurtainData, Abs, SearchResult
+from cb.models import SearchSession, AnalysisGroup, CurtainData, Abs, SearchResult, SourceFile, MetadataColumn, Species, \
+    MSUniqueVocabularies, Unimod
 
 
 @job('default', timeout='3h')
@@ -187,3 +188,95 @@ def export_search_data(search_session_id: int, filter_term: str, filter_log2_fc:
             }})
     return tempt_path + ".zip"
 
+@job('default', timeout='3h')
+def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
+    tempt_path = os.path.join(settings.MEDIA_ROOT, "temp", uuid_str+".sdrf.tsv")
+    analysis_group = AnalysisGroup.objects.get(id=analysis_group_id)
+    source_files = SourceFile.objects.filter(analysis_group=analysis_group)
+    columns = MetadataColumn.objects.filter(analysis_group=analysis_group, source_file__in=source_files)
+    print(columns)
+    unique_column_position_sorted = columns.values('column_position').distinct().order_by('column_position')
+    source_file_column_position_column_map = {}
+    column_header_map = {}
+    for c in columns:
+        if c.source_file.id not in source_file_column_position_column_map:
+            source_file_column_position_column_map[c.source_file.id] = {}
+        if c.column_position not in column_header_map:
+            if c.name == "Tissue":
+                column_header_map[c.column_position] = f"{c.type}[organism part]".lower()
+            elif c.type == "" or not c.type:
+                column_header_map[c.column_position] = f"{c.name}".lower()
+            else:
+                column_header_map[c.column_position] = f"{c.type}[{c.name}]".lower()
+        source_file_column_position_column_map[c.source_file.id][c.column_position] = c
+    sdrf = []
+    print(column_header_map)
+    print(unique_column_position_sorted)
+    for s in source_files:
+        row = [s.name]
+        for c in unique_column_position_sorted:
+            if c["column_position"] in source_file_column_position_column_map[s.id]:
+                column = source_file_column_position_column_map[s.id][c["column_position"]]
+                if column.value:
+                    name = column.name.lower()
+                    if name == "organism":
+                        species = Species.objects.filter(official_name=column.value)
+                        if species.exists():
+                            row.append(f"http://purl.obolibrary.org/obo/NCBITaxon_{species.first().taxon}")
+                        else:
+                            row.append(column.value)
+                    elif name == "label":
+                        vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="sample attribute")
+                        if vocab.exists():
+                            row.append(f"AC={vocab.first().accession};NT={column.value}")
+                        else:
+                            row.append(f"{column.value}")
+                    elif name == "cleavage agent details":
+                        vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="cleavage agent")
+                        if vocab.exists():
+                            row.append(f"AC={vocab.first().accession};NT={column.value}")
+                        else:
+                            row.append(f"{column.value}")
+                    elif name == "instrument":
+                        vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="instrument")
+                        if vocab.exists():
+                            row.append(f"AC={vocab.first().accession};NT={column.value}")
+                        else:
+                            row.append(f"{column.value}")
+                    elif name == "modification parameters":
+                        unimod = Unimod.objects.filter(name=column.value)
+                        if unimod.exists():
+                            row.append(f"AC={unimod.first().accession};NT={column.value}")
+                        else:
+                            row.append(f"{column.value}")
+                    elif name == "dissociation method":
+                        dissociation = MSUniqueVocabularies.objects.filter(name=column.value, term_type="dissociation method")
+                        if dissociation.exists():
+                            row.append(f"AC={dissociation.first().accession};NT={column.value}")
+                        else:
+                            row.append(f"{column.value}")
+                else:
+                    row.append("not applicable")
+            else:
+                row.append("not applicable")
+        sdrf.append(row)
+
+    sdrf.insert(0, [f"source name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
+
+    with open(tempt_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerows(sdrf)
+
+    signer = TimestampSigner()
+    value = signer.sign(f"{uuid_str}.sdrf.tsv")
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"curtain_{session_id}", {
+            "type": "curtain_message", "message": {
+                "type": "export_sdrf_status",
+                "status": "complete",
+                "file": value,
+                "analysis_group_id": analysis_group_id,
+                "job_id": uuid_str
+            }})
+    return tempt_path

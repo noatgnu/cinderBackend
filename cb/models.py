@@ -1251,7 +1251,8 @@ class SourceFile(models.Model):
                 name=dc["name"],
                 type=dc["type"],
                 column_position=i,
-                source_file=self
+                source_file=self,
+                analysis_group=self.analysis_group
             )
             if "value" in dc:
                 meta.value = dc["value"]
