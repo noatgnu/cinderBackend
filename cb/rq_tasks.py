@@ -215,47 +215,50 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
         for c in unique_column_position_sorted:
             if c["column_position"] in source_file_column_position_column_map[s.id]:
                 column = source_file_column_position_column_map[s.id][c["column_position"]]
-                if column.value:
-                    name = column.name.lower()
-                    if name == "organism":
-                        species = Species.objects.filter(official_name=column.value)
-                        if species.exists():
-                            row.append(f"http://purl.obolibrary.org/obo/NCBITaxon_{species.first().taxon}")
-                        else:
-                            row.append(column.value)
-                    elif name == "label":
-                        vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="sample attribute")
-                        if vocab.exists():
-                            row.append(f"AC={vocab.first().accession};NT={column.value}")
-                        else:
-                            row.append(f"{column.value}")
-                    elif name == "cleavage agent details":
-                        vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="cleavage agent")
-                        if vocab.exists():
-                            row.append(f"AC={vocab.first().accession};NT={column.value}")
-                        else:
-                            row.append(f"{column.value}")
-                    elif name == "instrument":
-                        vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="instrument")
-                        if vocab.exists():
-                            row.append(f"AC={vocab.first().accession};NT={column.value}")
-                        else:
-                            row.append(f"{column.value}")
-                    elif name == "modification parameters":
-                        splitted = column.value.split(";")
-                        unimod = Unimod.objects.filter(name=splitted[0])
-                        if unimod.exists():
-                            row.append(f"AC={unimod.first().accession};NT={column.value}")
-                        else:
-                            row.append(f"{column.value}")
-                    elif name == "dissociation method":
-                        dissociation = MSUniqueVocabularies.objects.filter(name=column.value, term_type="dissociation method")
-                        if dissociation.exists():
-                            row.append(f"AC={dissociation.first().accession};NT={column.value}")
-                        else:
-                            row.append(f"{column.value}")
-                else:
+                if column.not_applicable:
                     row.append("not applicable")
+                else:
+                    if column.value:
+                        name = column.name.lower()
+                        if name == "organism":
+                            species = Species.objects.filter(official_name=column.value)
+                            if species.exists():
+                                row.append(f"http://purl.obolibrary.org/obo/NCBITaxon_{species.first().taxon}")
+                            else:
+                                row.append(column.value)
+                        elif name == "label":
+                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="sample attribute")
+                            if vocab.exists():
+                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                        elif name == "cleavage agent details":
+                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="cleavage agent")
+                            if vocab.exists():
+                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                        elif name == "instrument":
+                            vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="instrument")
+                            if vocab.exists():
+                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                        elif name == "modification parameters":
+                            splitted = column.value.split(";")
+                            unimod = Unimod.objects.filter(name=splitted[0])
+                            if unimod.exists():
+                                row.append(f"AC={unimod.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                        elif name == "dissociation method":
+                            dissociation = MSUniqueVocabularies.objects.filter(name=column.value, term_type="dissociation method")
+                            if dissociation.exists():
+                                row.append(f"AC={dissociation.first().accession};NT={column.value}")
+                            else:
+                                row.append(f"{column.value}")
+                    else:
+                        row.append("not available")
             else:
                 row.append("not applicable")
         sdrf.append(row)
