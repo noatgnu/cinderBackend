@@ -1255,7 +1255,8 @@ class SourceFile(models.Model):
                 type=dc["type"],
                 column_position=i,
                 source_file=self,
-                analysis_group=self.analysis_group
+                analysis_group=self.analysis_group,
+                not_applicable=False
             )
             if "value" in dc:
                 meta.value = dc["value"]
@@ -1267,6 +1268,7 @@ class MetadataColumn(models.Model):
     type = models.CharField(max_length=255)
     column_position = models.IntegerField(blank=True, null=True, default=0)
     value = models.TextField(blank=True, null=True)
+    not_applicable = models.BooleanField(default=False)
     analysis_group = models.ForeignKey(AnalysisGroup, on_delete=models.CASCADE, related_name='metadata_columns', blank=True, null=True)
     source_file = models.ForeignKey(SourceFile, on_delete=models.CASCADE, related_name='metadata_columns', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -305,6 +305,17 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         export_sdrf_task.delay(analysis_group.id, uuid_str, instance_id)
         return Response({"job_id": uuid_str}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'])
+    def toggle_not_applicable_column(self, request, pk=None):
+        position = request.data['position']
+        analysis_group = self.get_object()
+        source_files = SourceFile.objects.filter(analysis_group=analysis_group)
+        columns = MetadataColumn.objects.filter(analysis_group=analysis_group, column_position=position, source_file__in=source_files)
+        for column in columns:
+            column.not_applicable = not column.not_applicable
+            column.save()
+        return Response(status=status.HTTP_200_OK)
+
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ProjectFileSerializer
     queryset = ProjectFile.objects.all()
@@ -1230,7 +1241,7 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
                 return Response(status=status.HTTP_400_BAD_REQUEST)
     def update(self, request, *args, **kwargs):
         metadata_column = self.get_object()
-        fields = ['name', 'description', 'value']
+        fields = ['name', 'description', 'value', 'not_applicable']
         for i in request.data:
             if i in fields:
                 setattr(metadata_column, i, request.data[i])
