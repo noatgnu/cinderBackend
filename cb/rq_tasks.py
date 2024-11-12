@@ -209,6 +209,7 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
                 column_header_map[c.column_position] = f"{c.type}[{c.name}]".lower()
         source_file_column_position_column_map[c.source_file.id][c.column_position] = c
     sdrf = []
+    
     for s in source_files:
         row = [s.name]
         for c in unique_column_position_sorted:
@@ -262,7 +263,7 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
     sdrf.insert(0, [f"source name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
 
     with open(tempt_path, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
+        writer = csv.writer(csvfile, delimiter='\t')
         writer.writerows(sdrf)
 
     signer = TimestampSigner()
