@@ -1232,14 +1232,17 @@ class SourceFile(models.Model):
             "name": "Cell type", "type": "Characteristics"
         }, {
             "name": "Biological replicate", "type": "Characteristics"
+        },{
+            "name": "Material type", "type": ""
         },
             {
                 "name": "Assay name", "type": ""
         }, {
             "name": "Technology type", "type": ""
-        }, {
-            "name": "Material type", "type": ""
-        }, {"name": "Label", "type": "Comment"},
+        },  {
+                "name": "Technical replicate", "type": "Comment"
+            },
+            {"name": "Label", "type": "Comment"},
             {"name": "Fraction identifier", "type": "Comment"},
             {"name": "Instrument", "type": "Comment"},
             {"name": "Data file", "type": "Comment"},
