@@ -1146,7 +1146,7 @@ class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
         if neighboring_source_file:
             metadata_columns = MetadataColumn.objects.filter(source_file=neighboring_source_file)
             for metadata_column in metadata_columns:
-                column = MetadataColumn.objects.create(analysis_group=analysis_group, source_file=source_file, name=metadata_column.name, type=metadata_column.type, column_position=metadata_column.column_position)
+                column = MetadataColumn.objects.create(analysis_group=analysis_group, source_file=source_file, name=metadata_column.name, type=metadata_column.type, column_position=metadata_column.column_position, mandatory=metadata_column.mandatory)
         else:
             if analysis_group.analysis_group_type == "proteomics" or analysis_group.analysis_group_type == "ptm":
                 source_file.initiate_default_columns()
