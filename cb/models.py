@@ -1223,34 +1223,34 @@ class SourceFile(models.Model):
 
     def initiate_default_columns(self):
         default_columns = [{
-            "name": "Organism", "type": "Characteristics"
+            "name": "Organism", "type": "Characteristics", "mandatory": True
         }, {
-            "name": "Tissue", "type": "Characteristics"
+            "name": "Tissue", "type": "Characteristics", "mandatory": True
         }, {
-            "name": "Disease", "type": "Characteristics"
+            "name": "Disease", "type": "Characteristics", "mandatory": True
         }, {
-            "name": "Cell type", "type": "Characteristics"
+            "name": "Cell type", "type": "Characteristics", "mandatory": True
         }, {
-            "name": "Biological replicate", "type": "Characteristics"
+            "name": "Biological replicate", "type": "Characteristics", "mandatory": True
         },{
-            "name": "Material type", "type": ""
+            "name": "Material type", "type": "", "mandatory": True
         },
             {
-                "name": "Assay name", "type": ""
+                "name": "Assay name", "type": "", "mandatory": True
         }, {
-            "name": "Technology type", "type": ""
+            "name": "Technology type", "type": "", "mandatory": True
         },  {
-                "name": "Technical replicate", "type": "Comment"
+                "name": "Technical replicate", "type": "Comment", "mandatory": True
             },
-            {"name": "Label", "type": "Comment"},
-            {"name": "Fraction identifier", "type": "Comment"},
-            {"name": "Instrument", "type": "Comment"},
-            {"name": "Data file", "type": "Comment"},
-            {"name": "Cleavage agent details", "type": "Comment"},
-            {"name": "Modification parameters", "type": "Comment"},
-            {"name": "Dissociation method", "type": "Comment"},
-            {"name": "Precursor mass tolerance", "type": "Comment"},
-            {"name": "Fragment mass tolerance", "type": "Comment"},
+            {"name": "Label", "type": "Comment", "mandatory": True},
+            {"name": "Fraction identifier", "type": "Comment", "mandatory": True},
+            {"name": "Instrument", "type": "Comment", "mandatory": True},
+            {"name": "Data file", "type": "Comment", "mandatory": True},
+            {"name": "Cleavage agent details", "type": "Comment", "mandatory": True},
+            {"name": "Modification parameters", "type": "Comment", "mandatory": True},
+            {"name": "Dissociation method", "type": "Comment", "mandatory": True},
+            {"name": "Precursor mass tolerance", "type": "Comment", "mandatory": True},
+            {"name": "Fragment mass tolerance", "type": "Comment", "mandatory": True},
         ]
         for i, dc in enumerate(default_columns):
             meta = MetadataColumn(
@@ -1259,7 +1259,8 @@ class SourceFile(models.Model):
                 column_position=i,
                 source_file=self,
                 analysis_group=self.analysis_group,
-                not_applicable=False
+                not_applicable=False,
+                mandatory=dc["mandatory"]
             )
             if "value" in dc:
                 meta.value = dc["value"]
@@ -1274,6 +1275,7 @@ class MetadataColumn(models.Model):
     not_applicable = models.BooleanField(default=False)
     analysis_group = models.ForeignKey(AnalysisGroup, on_delete=models.CASCADE, related_name='metadata_columns', blank=True, null=True)
     source_file = models.ForeignKey(SourceFile, on_delete=models.CASCADE, related_name='metadata_columns', blank=True, null=True)
+    mandatory = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

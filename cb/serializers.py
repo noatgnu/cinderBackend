@@ -212,7 +212,7 @@ class SourceFileSerializer(serializers.ModelSerializer):
 class MetadataColumnSerializer(serializers.ModelSerializer):
     class Meta:
         model = MetadataColumn
-        fields = ["id", "name", "type", "column_position", "value", "analysis_group", "source_file", "created_at", "updated_at", "not_applicable"]
+        fields = ["id", "name", "type", "column_position", "value", "analysis_group", "source_file", "created_at", "updated_at", "not_applicable", "mandatory"]
 
 class SubcellularLocationSerializer(serializers.ModelSerializer):
     class Meta:
