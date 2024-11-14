@@ -45,18 +45,25 @@ def load_instrument():
             term_type="dissociation method"
         )
 
-    response = requests.get("https://www.ebi.ac.uk/ols4/api/ontologies/pride/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FPRIDE_0000514/hierarchicalDescendants")
+    load_ebi_resource("https://www.ebi.ac.uk/ols4/api/ontologies/pride/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FPRIDE_0000514/hierarchicalDescendants")
+
+    load_ebi_resource("https://www.ebi.ac.uk/ols4/api/ontologies/clo/terms", 1000, "cell line")
+
+    load_ebi_resource("https://www.ebi.ac.uk/ols4/api/ontologies/efo/terms/http%253A%252F%252Fwww.ebi.ac.uk%252Fefo%252FEFO_0009090/hierarchicalDescendants", 1000, "Enrichment process")
+
+def load_ebi_resource(base_url: str, size: int = 20, term_type: str = "sample attribute"):
+    response = requests.get(base_url+"?page=0&size="+str(size))
     data = response.json()
     for term in data["_embedded"]["terms"]:
         MSUniqueVocabularies.objects.create(
             accession=term["obo_id"],
             name=term["label"],
             definition = term["description"],
-            term_type="sample attribute"
+            term_type=term_type
         )
     if data["page"]["totalPages"] > 1:
         for i in range(1, data["page"]["totalPages"]+1):
-            response = requests.get("https://www.ebi.ac.uk/ols4/api/ontologies/pride/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FPRIDE_0000514/hierarchicalDescendants?page="+str(i)+"&size=20")
+            response = requests.get(base_url+"?page="+str(i)+"&size="+str(size))
             data2 = response.json()
             if "_embedded" in data2:
                 for term in data2["_embedded"]["terms"]:
@@ -64,7 +71,7 @@ def load_instrument():
                         accession=term["obo_id"],
                         name=term["label"],
                         definition = term["description"],
-                        term_type="sample attribute"
+                        term_type=term_type
                     )
 
 
