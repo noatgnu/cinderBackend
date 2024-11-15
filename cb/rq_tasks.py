@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 import os
 import shutil
@@ -13,6 +14,8 @@ from django.db.models import Q
 from django_rq import job
 from rq.job import Job
 import re
+
+from sdrf_pipelines.sdrf.sdrf import SdrfDataFrame
 
 from cb.models import SearchSession, AnalysisGroup, CurtainData, Abs, SearchResult, SourceFile, MetadataColumn, Species, \
     MSUniqueVocabularies, Unimod
@@ -191,6 +194,28 @@ def export_search_data(search_session_id: int, filter_term: str, filter_log2_fc:
 @job('default', timeout='3h')
 def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
     tempt_path = os.path.join(settings.MEDIA_ROOT, "temp", uuid_str+".sdrf.tsv")
+    sdrf = create_sdrf_array_from_metadata(analysis_group_id)
+
+    with open(tempt_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, delimiter='\t')
+        writer.writerows(sdrf)
+
+    signer = TimestampSigner()
+    value = signer.sign(f"{uuid_str}.sdrf.tsv")
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"curtain_{session_id}", {
+            "type": "curtain_message", "message": {
+                "type": "export_sdrf_status",
+                "status": "complete",
+                "file": value,
+                "analysis_group_id": analysis_group_id,
+                "job_id": uuid_str
+            }})
+    return tempt_path
+
+
+def create_sdrf_array_from_metadata(analysis_group_id):
     analysis_group = AnalysisGroup.objects.get(id=analysis_group_id)
     source_files = SourceFile.objects.filter(analysis_group=analysis_group)
     columns = MetadataColumn.objects.filter(analysis_group=analysis_group, source_file__in=source_files)
@@ -209,7 +234,6 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
                 column_header_map[c.column_position] = f"{c.type}[{c.name}]".lower()
         source_file_column_position_column_map[c.source_file.id][c.column_position] = c
     sdrf = []
-
     for s in source_files:
         row = [s.name]
         for c in unique_column_position_sorted:
@@ -252,7 +276,8 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
                             else:
                                 row.append(f"{column.value}")
                         elif name == "dissociation method":
-                            dissociation = MSUniqueVocabularies.objects.filter(name=column.value, term_type="dissociation method")
+                            dissociation = MSUniqueVocabularies.objects.filter(name=column.value,
+                                                                               term_type="dissociation method")
                             if dissociation.exists():
                                 row.append(f"AC={dissociation.first().accession};NT={column.value}")
                             else:
@@ -262,23 +287,32 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
             else:
                 row.append("not applicable")
         sdrf.append(row)
-
     sdrf.insert(0, [f"source name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
+    return sdrf
 
-    with open(tempt_path, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerows(sdrf)
 
-    signer = TimestampSigner()
-    value = signer.sign(f"{uuid_str}.sdrf.tsv")
+@job('default', timeout='3h')
+def validate_sdrf_file(analysis_group_id: int, session_id: str):
+    sdrf = create_sdrf_array_from_metadata(analysis_group_id)
+    df = SdrfDataFrame.parse(io.StringIO("\n".join(["\t".join(i) for i in sdrf])))
+    errors = df.validate("default", True)
+    errors = errors + df.validate("mass_spectrometry", True)
+    errors = errors + df.validate_experimental_design()
     channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"curtain_{session_id}", {
-            "type": "curtain_message", "message": {
-                "type": "export_sdrf_status",
-                "status": "complete",
-                "file": value,
-                "analysis_group_id": analysis_group_id,
-                "job_id": uuid_str
-            }})
-    return tempt_path
+    if errors:
+        async_to_sync(channel_layer.group_send)(
+            f"curtain_{session_id}", {
+                "type": "curtain_message", "message": {
+                    "type": "sdrf_validation",
+                    "status": "error",
+                    "analysis_group_id": analysis_group_id,
+                    "errors": [str(e) for e in errors]
+                }})
+    else:
+        async_to_sync(channel_layer.group_send)(
+            f"curtain_{session_id}", {
+                "type": "curtain_message", "message": {
+                    "type": "sdrf_validation",
+                    "status": "complete",
+                    "analysis_group_id": analysis_group_id
+                }})

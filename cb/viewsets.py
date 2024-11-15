@@ -20,7 +20,7 @@ from rest_framework.response import Response
 
 from cb.filters import UnimodFilter
 from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysis_group_from_curtain_data, \
-    export_search_data, export_sdrf_task
+    export_search_data, export_sdrf_task, validate_sdrf_file
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
@@ -315,6 +315,13 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         for column in columns:
             column.not_applicable = not column.not_applicable
             column.save()
+        return Response(status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def validate_sdrf(self, request, pk=None):
+        analysis_group = self.get_object()
+        session_id = request.data['session_id']
+        validate_sdrf_file.delay(analysis_group.id, session_id)
         return Response(status=status.HTTP_200_OK)
 
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
