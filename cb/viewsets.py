@@ -4,6 +4,7 @@ import uuid
 
 import pandas as pd
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
+from django.db import transaction
 from django.db.models import Q, Max
 from django.http import HttpResponse
 from django.contrib.auth.models import User
@@ -1151,9 +1152,18 @@ class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
         #get a neighboring sourcefile in the same analysis group
         neighboring_source_file = SourceFile.objects.filter(analysis_group=analysis_group).exclude(id=source_file.id).first()
         if neighboring_source_file:
-            metadata_columns = MetadataColumn.objects.filter(source_file=neighboring_source_file)
-            for metadata_column in metadata_columns:
-                column = MetadataColumn.objects.create(analysis_group=analysis_group, source_file=source_file, name=metadata_column.name, type=metadata_column.type, column_position=metadata_column.column_position, mandatory=metadata_column.mandatory)
+            with transaction.atomic():
+                metadata_columns = MetadataColumn.objects.filter(source_file=neighboring_source_file)
+                analysis_group_metadata_columns = MetadataColumn.objects.filter(analysis_group=analysis_group, source_file__isnull=True)
+                for metadata_column in metadata_columns:
+                    last_value = None
+                    specific_analysis_group_metadata_column = analysis_group_metadata_columns.filter(name=metadata_column.name, type=metadata_column.type)
+                    if specific_analysis_group_metadata_column.exists():
+                        last_value = specific_analysis_group_metadata_column.last().value
+                    column = MetadataColumn(analysis_group=analysis_group, source_file=source_file, name=metadata_column.name, type=metadata_column.type, column_position=metadata_column.column_position, mandatory=metadata_column.mandatory)
+                    if last_value:
+                        column.value = last_value
+                    column.save()
         else:
             if analysis_group.analysis_group_type == "proteomics" or analysis_group.analysis_group_type == "ptm":
                 source_file.initiate_default_columns()

@@ -15,7 +15,7 @@ from channels.layers import get_channel_layer
 from curtainutils.client import CurtainClient, CurtainUniprotData
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVectorField, SearchHeadline, SearchVector, SearchQuery
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Func
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -1252,19 +1252,30 @@ class SourceFile(models.Model):
             {"name": "Precursor mass tolerance", "type": "Comment", "mandatory": True},
             {"name": "Fragment mass tolerance", "type": "Comment", "mandatory": True},
         ]
-        for i, dc in enumerate(default_columns):
-            meta = MetadataColumn(
-                name=dc["name"],
-                type=dc["type"],
-                column_position=i,
-                source_file=self,
-                analysis_group=self.analysis_group,
-                not_applicable=False,
-                mandatory=dc["mandatory"]
-            )
-            if "value" in dc:
-                meta.value = dc["value"]
-            meta.save()
+        analysis_group_meta_column = MetadataColumn.objects.filter(analysis_group=self.analysis_group, source_file__isnull=True)
+        with transaction.atomic():
+            for i, dc in enumerate(default_columns):
+                last_value = None
+                specific_analysis_group_meta_column = analysis_group_meta_column.filter(name=dc["name"], type=dc["type"])
+                if specific_analysis_group_meta_column:
+                    last_analysis_group_meta_column = specific_analysis_group_meta_column.last()
+                    last_value = last_analysis_group_meta_column.value
+                meta = MetadataColumn(
+                    name=dc["name"],
+                    type=dc["type"],
+                    column_position=i,
+                    source_file=self,
+                    analysis_group=self.analysis_group,
+                    not_applicable=False,
+                    mandatory=dc["mandatory"]
+                )
+
+                if last_value:
+                    meta.value = last_value
+                else:
+                    if "value" in dc:
+                        meta.value = dc["value"]
+                meta.save()
 
 
 class MetadataColumn(models.Model):
