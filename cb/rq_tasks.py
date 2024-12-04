@@ -237,7 +237,7 @@ def create_sdrf_array_from_metadata(analysis_group_id):
         source_file_column_position_column_map[c.source_file.id][c.column_position] = c
     sdrf = []
     for s in source_files:
-        row = [s.name]
+        row = []
         for c in unique_column_position_sorted:
             if c["column_position"] in source_file_column_position_column_map[s.id]:
                 column = source_file_column_position_column_map[s.id][c["column_position"]]
@@ -284,12 +284,14 @@ def create_sdrf_array_from_metadata(analysis_group_id):
                                 row.append(f"AC={dissociation.first().accession};NT={column.value}")
                             else:
                                 row.append(f"{column.value}")
+                        else:
+                            row.append(column.value)
                     else:
                         row.append("not available")
             else:
                 row.append("not applicable")
         sdrf.append(row)
-    #sdrf.insert(0, [f"source name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
+    sdrf.insert(0, [column_header_map[i['column_position']] for i in unique_column_position_sorted])
     return sdrf
 
 
@@ -326,12 +328,41 @@ def process_imported_metadata_file(analysis_group_id, file_id, file_type, user_i
     analysis_group = AnalysisGroup.objects.get(id=analysis_group_id)
     file = ChunkedUpload.objects.get(id=file_id)
     analysis_group.source_files.all().delete()
-    sdrf_col_pattern = re.compile(r"\[(\w+)\]")
-    default_columns = ["Source name", "Organism", "Tissue", "Disease", "Cell type", "Biological replicate",
-                       "Material type", "Assay name", "Technology type", "Technical replicate", "Label",
-                       "Fraction identifier", "Instrument", "Data file", "Cleavage agent details",
-                       "Modification parameters", "Dissociation method", "Precursor mass tolerance",
-                       "Fragment mass tolerance"]
+    sdrf_col_pattern = re.compile(r"\[(.+)\]")
+    default_columns_list = [{
+        "name": "Source name", "type": "", "mandatory": True
+    },
+        {
+            "name": "Organism", "type": "Characteristics", "mandatory": True
+        }, {
+            "name": "Tissue", "type": "Characteristics", "mandatory": True
+        }, {
+            "name": "Disease", "type": "Characteristics", "mandatory": True
+        }, {
+            "name": "Cell type", "type": "Characteristics", "mandatory": True
+        }, {
+            "name": "Biological replicate", "type": "Characteristics", "mandatory": True
+        }, {
+            "name": "Material type", "type": "", "mandatory": True
+        },
+        {
+            "name": "Assay name", "type": "", "mandatory": True
+        }, {
+            "name": "Technology type", "type": "", "mandatory": True
+        }, {
+            "name": "Technical replicate", "type": "Comment", "mandatory": True
+        },
+        {"name": "Label", "type": "Comment", "mandatory": True},
+        {"name": "Fraction identifier", "type": "Comment", "mandatory": True},
+        {"name": "Instrument", "type": "Comment", "mandatory": True},
+        {"name": "Data file", "type": "Comment", "mandatory": True},
+        {"name": "Cleavage agent details", "type": "Comment", "mandatory": True},
+        {"name": "Modification parameters", "type": "Comment", "mandatory": True},
+        {"name": "Dissociation method", "type": "Comment", "mandatory": True},
+        {"name": "Precursor mass tolerance", "type": "Comment", "mandatory": True},
+        {"name": "Fragment mass tolerance", "type": "Comment", "mandatory": True},
+    ]
+    default_columns = [i["name"].lower() for i in default_columns_list]
     progress_count = 0
     if file_type == "SDRF":
         df = SdrfDataFrame.parse(file.file.path)
@@ -343,6 +374,7 @@ def process_imported_metadata_file(analysis_group_id, file_id, file_type, user_i
             source_file.analysis_group = analysis_group
             source_file.user = user
             source_file.save()
+
             for i in df.columns:
                 sdrf_col_pattern_match = sdrf_col_pattern.search(i.lower())
                 metadata_column = MetadataColumn()
@@ -364,6 +396,24 @@ def process_imported_metadata_file(analysis_group_id, file_id, file_type, user_i
                 metadata_column.source_file = source_file
                 metadata_column.analysis_group = analysis_group
                 metadata_column.save()
+
+            # check if the source file has all the mandatory columns and insert the default values if not in three groups, characteristics, comments and other. Missing mandatory column should be added before any non-mandatory columns. The positions of all columns should change accordingly.
+            bulk_metadata_columns_characteristics = []
+            bulk_metadata_columns_other = []
+            bulk_metadata_columns_comments = []
+
+
+
+            for i in default_columns_list:
+                if not source_file.metadata_columns.filter(name=i["name"]).exists():
+                    metadata_column = MetadataColumn()
+                    metadata_column.name = i["name"]
+                    metadata_column.type = i["type"]
+                    metadata_column.mandatory = i["mandatory"]
+                    metadata_column.source_file = source_file
+                    metadata_column.analysis_group = analysis_group
+
+
             async_to_sync(channel_layer.group_send)(
                 f"curtain_{session_id}", {
                     "type": "curtain_message", "message": {

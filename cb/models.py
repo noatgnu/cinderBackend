@@ -23,6 +23,7 @@ from rest_framework.authtoken.models import Token
 from django.conf import settings
 
 import cb
+from cb.utils import default_columns
 
 
 # if settings.DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
@@ -98,6 +99,10 @@ class AnalysisGroup(models.Model):
 
     def __str__(self):
         return self.name
+
+    def reorder_all_columns(self):
+        for source_file in self.source_files.all():
+            source_file.reorder_columns()
 
 # ProjectFile model represents a file in a project.
 # Each ProjectFile has a name, description, hash, file_category, file_type, file, analysis_group, path, created_at, updated_at, load_file_content, metadata, project fields.
@@ -1222,39 +1227,7 @@ class SourceFile(models.Model):
         super().delete(using, keep_parents)
 
     def initiate_default_columns(self):
-        default_columns = [{
-            "name": "Source name", "type": "", "mandatory": True
-        },
-            {
-            "name": "Organism", "type": "Characteristics", "mandatory": True
-        }, {
-            "name": "Tissue", "type": "Characteristics", "mandatory": True
-        }, {
-            "name": "Disease", "type": "Characteristics", "mandatory": True
-        }, {
-            "name": "Cell type", "type": "Characteristics", "mandatory": True
-        }, {
-            "name": "Biological replicate", "type": "Characteristics", "mandatory": True
-        },{
-            "name": "Material type", "type": "", "mandatory": True
-        },
-            {
-                "name": "Assay name", "type": "", "mandatory": True
-        }, {
-            "name": "Technology type", "type": "", "mandatory": True
-        },  {
-                "name": "Technical replicate", "type": "Comment", "mandatory": True
-            },
-            {"name": "Label", "type": "Comment", "mandatory": True},
-            {"name": "Fraction identifier", "type": "Comment", "mandatory": True},
-            {"name": "Instrument", "type": "Comment", "mandatory": True},
-            {"name": "Data file", "type": "Comment", "mandatory": True},
-            {"name": "Cleavage agent details", "type": "Comment", "mandatory": True},
-            {"name": "Modification parameters", "type": "Comment", "mandatory": True},
-            {"name": "Dissociation method", "type": "Comment", "mandatory": True},
-            {"name": "Precursor mass tolerance", "type": "Comment", "mandatory": True},
-            {"name": "Fragment mass tolerance", "type": "Comment", "mandatory": True},
-        ]
+
         analysis_group_meta_column = MetadataColumn.objects.filter(analysis_group=self.analysis_group, source_file__isnull=True)
         with transaction.atomic():
             for i, dc in enumerate(default_columns):
@@ -1291,6 +1264,59 @@ class SourceFile(models.Model):
                     if "value" in dc:
                         meta.value = dc["value"]
                 meta.save()
+
+    def reorder_columns(self):
+        # reorder the columns based on three groups, characteristics, other and comments where within each group the mandatory columns have to follow the order from default_columns and mandatory columns should appear first, followed by non-mandatory. The order should be characteristics, other and comments.
+        characteristics = MetadataColumn.objects.filter(source_file=self,
+                                                        analysis_group=self.analysis_group,
+                                                        type="Characteristics").order_by("column_position")
+        other = MetadataColumn.objects.filter(source_file=self, analysis_group=self.analysis_group,
+                                              type="").exclude(name="Source name").order_by("column_position")
+        comments = MetadataColumn.objects.filter(source_file=self, analysis_group=self.analysis_group,
+                                                 type="Comment").order_by("column_position")
+
+        default_columns_characteristics = [dc for dc in default_columns if dc["type"] == "Characteristics"]
+        default_columns_other = [dc for dc in default_columns if dc["type"] == "" and dc["name"] != "Source name"]
+        default_columns_comment = [dc for dc in default_columns if dc["type"] == "Comment"]
+
+        def update_positions(columns, default_columns, current_position=0):
+            mandatory_columns = columns.filter(name__in=[dc["name"] for dc in default_columns])
+            non_mandatory_columns = columns.exclude(name__in=[dc["name"] for dc in default_columns])
+
+            for dc in mandatory_columns:
+                cols = columns.filter(name=dc.name)
+                for column in cols:
+                    column.column_position = current_position
+                    column.save()
+                    current_position += 1
+
+            for column in non_mandatory_columns:
+                column.column_position = current_position
+                column.save()
+                current_position += 1
+
+            return current_position
+
+        with transaction.atomic():
+            # Ensure "Source name" is always at position 0
+            source_name_column = MetadataColumn.objects.filter(source_file=self, analysis_group=self.analysis_group,
+                                                               name="Source name")
+            if source_name_column:
+                source_name_column = source_name_column.first()
+                source_name_column.column_position = 0
+                source_name_column.save()
+
+            position = update_positions(characteristics, default_columns_characteristics, current_position=1)
+            position = update_positions(other, default_columns_other, position)
+            position = update_positions(comments, default_columns_comment, position)
+
+            # Ensure "Factor value" columns are at the end of Comments
+            factor_value_columns = MetadataColumn.objects.filter(
+                source_file=self, analysis_group=self.analysis_group, type="Factor Value").order_by("column_position")
+            for column in factor_value_columns:
+                column.column_position = position
+                column.save()
+                position += 1
 
 
 class MetadataColumn(models.Model):

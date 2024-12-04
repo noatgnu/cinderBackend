@@ -339,6 +339,16 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         process_imported_metadata_file.delay(analysis_group.id, uploaded_id, file_type, self.request.user.id, session_id)
         return Response(status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'])
+    def reorder_columns(self, request, pk=None):
+        analysis_group: AnalysisGroup = self.get_object()
+        if analysis_group.project.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+        analysis_group.reorder_all_columns()
+        data = AnalysisGroupSerializer(analysis_group).data
+        return Response(data, status=status.HTTP_200_OK)
+
 
 
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -1348,6 +1358,10 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
         metadata_columns_same_position.update(value=metadata_column.value)
         data = MetadataColumnSerializer(metadata_columns_same_position, many=True).data
         return Response(data, status=status.HTTP_200_OK)
+
+
+
+
 
 
 
