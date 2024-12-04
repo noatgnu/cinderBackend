@@ -1327,6 +1327,29 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
             data = MetadataColumnSerializer(metadata_column).data
             return Response([data], status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'])
+    def copy_value_to_all_in_same_position(self, request, pk=None):
+        metadata_column = self.get_object()
+        blank_only = request.data.get('blank_only', False)
+        blank_only = True if blank_only == 'true' else False
+        if metadata_column.analysis_group.project.user != request.user:
+            if not request.user.is_staff:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+
+        source_files = SourceFile.objects.filter(analysis_group=metadata_column.analysis_group)
+        if blank_only:
+            metadata_columns_same_position = MetadataColumn.objects.filter(analysis_group=metadata_column.analysis_group,
+                                                                      column_position=metadata_column.column_position,
+                                                                      source_file__in=source_files, value=None)
+        else:
+            metadata_columns_same_position = MetadataColumn.objects.filter(analysis_group=metadata_column.analysis_group,
+                                                                      column_position=metadata_column.column_position,
+                                                                      source_file__in=source_files)
+        metadata_columns_same_position.update(value=metadata_column.value)
+        data = MetadataColumnSerializer(metadata_columns_same_position, many=True).data
+        return Response(data, status=status.HTTP_200_OK)
+
+
 
 class MSUniqueVocabulariesViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = MSUniqueVocabulariesSerializer
