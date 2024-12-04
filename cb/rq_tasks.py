@@ -9,9 +9,11 @@ import pandas as pd
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer, channel_layers
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.core.signing import TimestampSigner
-from django.db.models import Q
+from django.db.models import Q, Max
 from django_rq import job
+from drf_chunked_upload.models import ChunkedUpload
 from rq.job import Job
 import re
 
@@ -287,7 +289,7 @@ def create_sdrf_array_from_metadata(analysis_group_id):
             else:
                 row.append("not applicable")
         sdrf.append(row)
-    sdrf.insert(0, [f"source name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
+    #sdrf.insert(0, [f"source name"] + [column_header_map[i['column_position']] for i in unique_column_position_sorted])
     return sdrf
 
 
@@ -316,3 +318,123 @@ def validate_sdrf_file(analysis_group_id: int, session_id: str):
                     "status": "complete",
                     "analysis_group_id": analysis_group_id
                 }})
+
+@job('default', timeout='3h')
+def process_imported_metadata_file(analysis_group_id, file_id, file_type, user_id, session_id):
+    channel_layer = get_channel_layer()
+    user = User.objects.get(id=user_id)
+    analysis_group = AnalysisGroup.objects.get(id=analysis_group_id)
+    file = ChunkedUpload.objects.get(id=file_id)
+    analysis_group.source_files.all().delete()
+    sdrf_col_pattern = re.compile(r"\[(\w+)\]")
+    default_columns = ["Source name", "Organism", "Tissue", "Disease", "Cell type", "Biological replicate",
+                       "Material type", "Assay name", "Technology type", "Technical replicate", "Label",
+                       "Fraction identifier", "Instrument", "Data file", "Cleavage agent details",
+                       "Modification parameters", "Dissociation method", "Precursor mass tolerance",
+                       "Fragment mass tolerance"]
+    progress_count = 0
+    if file_type == "SDRF":
+        df = SdrfDataFrame.parse(file.file.path)
+        for ind, row in df.iterrows():
+            progress_count += 1
+            source_file = SourceFile()
+            source_file.name = row["comment[data file]"]
+            source_file.description = row["comment[data file]"]
+            source_file.analysis_group = analysis_group
+            source_file.user = user
+            source_file.save()
+            for i in df.columns:
+                sdrf_col_pattern_match = sdrf_col_pattern.search(i.lower())
+                metadata_column = MetadataColumn()
+                if sdrf_col_pattern_match:
+                    metadata_column.type = i[:sdrf_col_pattern_match.start(0)].capitalize()
+                    metadata_column.name = sdrf_col_pattern_match.group(1).lower().capitalize()
+                else:
+                    metadata_column.name = i.lower().capitalize()
+                metadata_column.column_position = df.columns.get_loc(i)
+                if metadata_column.name in default_columns:
+                    metadata_column.not_applicable = False
+                    metadata_column.mandatory = True
+                if row[i].lower() == "not applicable":
+                    metadata_column.not_applicable = True
+                elif row[i].lower() == "not available":
+                    metadata_column.value = None
+                else:
+                    metadata_column.value = row[i]
+                metadata_column.source_file = source_file
+                metadata_column.analysis_group = analysis_group
+                metadata_column.save()
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "sdrf_import",
+                        "status": "in_progress",
+                        "progress": 100 / (len(df.index)) * progress_count,
+                        "analysis_group_id": analysis_group_id
+                    }})
+    elif file_type == "Spectronaut Condition Setup File":
+        df = pd.read_csv(file.file.path, sep="\t")
+
+        for ind, row in df.iterrows():
+            progress_count += 1
+            source_file = SourceFile()
+            source_file.name = row["File Name"]
+            source_file.description = row["File Name"]
+            source_file.analysis_group = analysis_group
+            source_file.user = user
+            source_file.save()
+            source_file.initiate_default_columns()
+            for m in source_file.metadata_columns.all():
+                if m.name == "Assay name":
+                    m.value = f"run {row['#']}"
+                elif m.name == "Biological replicate":
+                    m.value = row["Replicate"]
+                elif m.name == "Source name":
+                    m.value = f"{row['#']}"
+                elif m.name == "Fraction identifier":
+                    m.value = "1"
+                elif m.name == "Technical replicate":
+                    m.value = "1"
+                elif m.name == "Data file":
+                    m.value = row["Run Label"]
+                m.save()
+            last_characteristics_column = source_file.metadata_columns.filter(type="Characteristics").last()
+            condition_metadata_column = MetadataColumn()
+            condition_metadata_column.name = "Condition"
+            condition_metadata_column.type = "Characteristics"
+            condition_metadata_column.source_file = source_file
+            condition_metadata_column.analysis_group = analysis_group
+            condition_metadata_column.value = row["Condition"]
+            condition_metadata_column.column_position = last_characteristics_column.column_position + 1
+            # change the position of the columns after the last characteristics column
+            source_file.metadata_columns.filter(column_position__gt=last_characteristics_column.column_position)
+            for i in source_file.metadata_columns.filter(
+                    column_position__gt=last_characteristics_column.column_position):
+                i.column_position += 1
+                i.save(update_fields=['column_position'])
+            hightest_position = source_file.metadata_columns.aggregate(Max('column_position'))['column_position__max']
+            MetadataColumn.objects.create(
+                name="Condition",
+                type="Factor value",
+                source_file=source_file,
+                analysis_group=analysis_group,
+                value=row["Condition"],
+                column_position=hightest_position + 1
+            )
+            condition_metadata_column.save()
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "sdrf_import",
+                        "status": "in_progress",
+                        "progress": 100/(len(df.index))*progress_count,
+                        "analysis_group_id": analysis_group_id
+                    }})
+    async_to_sync(channel_layer.group_send)(
+        f"curtain_{session_id}", {
+            "type": "curtain_message", "message": {
+                "type": "sdrf_import",
+                "status": "complete",
+                "progress": 100,
+                "analysis_group_id": analysis_group_id
+            }})

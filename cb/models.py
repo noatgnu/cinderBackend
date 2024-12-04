@@ -1223,6 +1223,9 @@ class SourceFile(models.Model):
 
     def initiate_default_columns(self):
         default_columns = [{
+            "name": "Source name", "type": "", "mandatory": True
+        },
+            {
             "name": "Organism", "type": "Characteristics", "mandatory": True
         }, {
             "name": "Tissue", "type": "Characteristics", "mandatory": True
@@ -1260,15 +1263,27 @@ class SourceFile(models.Model):
                 if specific_analysis_group_meta_column:
                     last_analysis_group_meta_column = specific_analysis_group_meta_column.last()
                     last_value = last_analysis_group_meta_column.value
-                meta = MetadataColumn(
-                    name=dc["name"],
-                    type=dc["type"],
-                    column_position=i,
-                    source_file=self,
-                    analysis_group=self.analysis_group,
-                    not_applicable=False,
-                    mandatory=dc["mandatory"]
-                )
+                if default_columns[i]["name"] == "Data file":
+                    meta = MetadataColumn(
+                        name=dc["name"],
+                        type=dc["type"],
+                        column_position=i,
+                        source_file=self,
+                        analysis_group=self.analysis_group,
+                        not_applicable=False,
+                        mandatory=dc["mandatory"],
+                        value=self.file.name
+                    )
+                else:
+                    meta = MetadataColumn(
+                        name=dc["name"],
+                        type=dc["type"],
+                        column_position=i,
+                        source_file=self,
+                        analysis_group=self.analysis_group,
+                        not_applicable=False,
+                        mandatory=dc["mandatory"]
+                    )
 
                 if last_value:
                     meta.value = last_value

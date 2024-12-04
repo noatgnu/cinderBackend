@@ -1,5 +1,6 @@
 import csv
 import json
+import re
 import uuid
 
 import pandas as pd
@@ -18,10 +19,11 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
+from sdrf_pipelines.sdrf.sdrf import SdrfDataFrame
 
 from cb.filters import UnimodFilter
 from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysis_group_from_curtain_data, \
-    export_search_data, export_sdrf_task, validate_sdrf_file
+    export_search_data, export_sdrf_task, validate_sdrf_file, process_imported_metadata_file
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
@@ -324,6 +326,20 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         session_id = request.data['session_id']
         validate_sdrf_file.delay(analysis_group.id, session_id)
         return Response(status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def process_uploaded_metadata_file(self, request, pk=None):
+        analysis_group: AnalysisGroup = self.get_object()
+        if not self.request.user.is_staff:
+            if not self.request.user == analysis_group.project.user:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+        uploaded_id = request.data['upload_id']
+        file_type = request.data['file_type']
+        session_id = request.data['session_id']
+        process_imported_metadata_file.delay(analysis_group.id, uploaded_id, file_type, self.request.user.id, session_id)
+        return Response(status=status.HTTP_200_OK)
+
+
 
 class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ProjectFileSerializer
