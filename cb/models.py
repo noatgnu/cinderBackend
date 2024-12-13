@@ -1283,7 +1283,7 @@ class SourceFile(models.Model):
             mandatory_columns = columns.filter(name__in=[dc["name"] for dc in default_columns])
             non_mandatory_columns = columns.exclude(name__in=[dc["name"] for dc in default_columns])
 
-            for dc in mandatory_columns:
+            for dc in default_columns:
                 cols = columns.filter(name=dc.name)
                 for column in cols:
                     column.column_position = current_position
