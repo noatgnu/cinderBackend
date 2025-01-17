@@ -333,7 +333,7 @@ class SearchSession(models.Model):
     """
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    search_term = models.CharField(max_length=255)
+    search_term = models.TextField()
     session_id = models.CharField(max_length=255, blank=True, null=True)
     analysis_groups = models.ManyToManyField(AnalysisGroup, related_name='search_sessions', blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='search_sessions', blank=True, null=True)
