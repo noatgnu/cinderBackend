@@ -430,7 +430,7 @@ class SearchSession(models.Model):
                 if result.comparison_label not in primary_id_analysis_group_result_map[result.primary_id][result.file.analysis_group.id]:
                     primary_id_analysis_group_result_map[result.primary_id][result.file.analysis_group.id][result.comparison_label] = result
                 else:
-                    primary_id_analysis_group_result_map[result.primary_id][result.file.analysis_group.id][result.comparison_label] += f",{result.search_term}"
+                    primary_id_analysis_group_result_map[result.primary_id][result.file.analysis_group.id][result.comparison_label].search_term += f" or {result.search_term}"
             for related in related_files:
                 with related.file.open('rt') as infile:
                     first_line_of_file = infile.readline()
