@@ -9,11 +9,13 @@ from django.db import transaction
 from django.db.models import Q, Max
 from django.http import HttpResponse
 from django.contrib.auth.models import User
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters.views import FilterMixin
 from drf_chunked_upload.models import ChunkedUpload
 from rest_framework import viewsets, permissions, status
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import LimitOffsetPagination
@@ -1077,6 +1079,18 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
         if User.objects.filter(username=request.data['username']).exists():
             return Response({'detail': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"token": token}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def get_token(self, request):
+        user: User = request.user
+        token = Token.objects.get(user=user)
+        return Response({'token': token.key})
+
+    @ensure_csrf_cookie
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
+    def set_csrf(self, request):
+        return Response(status=status.HTTP_200_OK)
+
 
 class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer

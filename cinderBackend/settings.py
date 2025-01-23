@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import os
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -49,6 +50,13 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'dbbackup',
     'drf_chunked_upload',
+    'allauth',
+    'allauth.account',
+    'allauth.headless',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.openid_connect',
+    'allauth.mfa',
+    'allauth.usersessions',
 ]
 
 MIDDLEWARE = [
@@ -60,6 +68,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -162,6 +171,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20
@@ -186,6 +196,9 @@ CORS_ALLOW_HEADERS = [
     "content-disposition",
     "x-cinder-instance-id",
     "http_x_cinder_instance_id",
+    "http-x-csrftoken",
+    'x-session-token',
+    'http-x-session-token',
 ]
 
 CORS_ORIGIN_WHITELIST = os.environ.get("CORS_ORIGIN_WHITELIST", "http://localhost:4200").split(",")
@@ -270,7 +283,8 @@ STORAGES = {
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
-
+CSRF_COOKIE_NAME = "csrfToken"
+CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
 # DRF Chunked Upload settings
 
 DRF_CHUNKED_UPLOAD_ABSTRACT_MODEL = False
@@ -281,3 +295,57 @@ CURTAIN_HOST = os.environ.get("CURTAIN_HOST", "https://celsus.muttsu.xyz")
 
 # FRONTEND settings
 FRONTEND_FOOTER = os.environ.get("FRONTEND_FOOTER", "MRC-PPU, University of Dundee. ASAP.")
+
+HEADLESS_ONLY = True
+
+
+
+SOCIALACCOUNT_PROVIDERS = {
+    "openid_connect": {
+        "APPS": [
+
+        ]
+    }
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+}
+
+ACCOUNT_ADAPTER = 'cb.account_adapter.CustomAccountAdapter'
+SOCIALACCOUNT_ADAPTER = 'cb.account_adapter.CustomSocialAccountAdapter'
+if os.environ.get("SECURE_SSL_REDIRECT", "True") == "True":
+    SECURE_SSL_REDIRECT = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+if os.environ.get("KEYCLOAK_CLIENT_ID", None):
+    SOCIALACCOUNT_PROVIDERS["openid_connect"]["APPS"].append(
+        {
+            "provider_id": "keycloak",
+            "name": "Keycloak",
+            "client_id": os.environ.get("KEYCLOAK_CLIENT_ID", None),
+            "secret": os.environ.get("KEYCLOAK_SECRET", None),
+            "settings": {
+                "server_url": os.environ.get("KEYCLOAK_SERVER_URL", "http://localhost:8080/auth/realms/carcosa"),
+            },
+        }
+    )
+
+    HEADLESS_FRONTEND_URLS = {
+        #"account_confirm_email": "https://app.project.org/account/verify-email/{key}",
+        #"account_reset_password_from_key": "https://app.org/account/password/reset/key/{key}",
+        #"account_signup": "https://app.org/account/signup",
+    }
+
+    HEADLESS_TOKEN_STRATEGY = "cb.token_strategy.TokenStrategy"
+    ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'
