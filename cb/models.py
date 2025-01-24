@@ -351,7 +351,17 @@ class SearchSession(models.Model):
     ]
     search_mode = models.CharField(max_length=255, choices=search_mode_choices, default='full')
     failed = models.BooleanField(default=False)
-    species = models.ForeignKey("Species", on_delete=models.CASCADE, related_name="search_sessions", blank=True, null=True)
+    species = models.ForeignKey("Species", on_delete=models.SET_NULL, related_name="search_sessions", blank=True, null=True)
+    data_type_choices = [
+        ('proteomics', 'Proteomics'),
+        ('ptm', 'Post-translational Modification'),
+        ('proteogenomics', 'Proteogenomics'),
+        ('metabolomics', 'Metabolomics'),
+        ('lipidomics', 'Lipidomics'),
+        ('glycomics', 'Glycomics'),
+        ('glycoproteomics', 'Glycoproteomics'),
+    ]
+    data_type = models.CharField(max_length=255, choices=data_type_choices, default='proteomics', blank=True, null=True)
 
     class Meta:
         ordering = ['created_at']
@@ -762,7 +772,7 @@ class SearchResult(models.Model):
     #headline_results = models.TextField(blank=True, null=True)
     #search_results = models.TextField(blank=True, null=True)
     #search_count = models.IntegerField(default=0)
-    file = models.ForeignKey(ProjectFile, on_delete=models.CASCADE, related_name='search_results', blank=True, null=True)
+    file = models.ForeignKey(ProjectFile, on_delete=models.SET_NULL, related_name='search_results', blank=True, null=True)
     session = models.ForeignKey(SearchSession, on_delete=models.CASCADE, related_name='search_results', blank=True, null=True)
     analysis_group = models.ForeignKey(AnalysisGroup, on_delete=models.CASCADE, related_name='search_results', blank=True, null=True)
     condition_A = models.CharField(max_length=255, blank=True, null=True)
@@ -1171,6 +1181,17 @@ class Collate(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='collates', blank=True)
     settings = models.JSONField(blank=True, null=True)
+    data_type_choices = [
+        ('proteomics', 'Proteomics'),
+        ('ptm', 'Post-translational Modification'),
+        ('proteogenomics', 'Proteogenomics'),
+        ('metabolomics', 'Metabolomics'),
+        ('lipidomics', 'Lipidomics'),
+        ('glycomics', 'Glycomics'),
+        ('glycoproteomics', 'Glycoproteomics'),
+    ]
+    data_type = models.CharField(max_length=255, choices=data_type_choices, default='proteomics', blank=True, null=True)
+
 
     class Meta:
         ordering = ['created_at']

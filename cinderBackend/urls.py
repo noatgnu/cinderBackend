@@ -54,4 +54,6 @@ urlpatterns = [
     path('api/chunked_upload/<uuid:pk>/', DataChunkedUploadView.as_view(), name='chunkedupload-detail'),
     path('api/logout/', LogoutView.as_view(), name='logout'),
     path('api/frontend_template/', FrontEndTemplateView.as_view(), name='frontend_template'),
+    path('accounts/', include('allauth.urls')),
+    path("_allauth/", include("allauth.headless.urls")),
 ]
