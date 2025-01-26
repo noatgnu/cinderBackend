@@ -14,7 +14,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django_filters.views import FilterMixin
 from drf_chunked_upload.models import ChunkedUpload
 from rest_framework import viewsets, permissions, status
-from rest_framework.authentication import TokenAuthentication
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter, OrderingFilter
@@ -46,7 +46,7 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
     filterset_fields = ['name', 'user']
     search_fields = ['name']
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     pagination_class = LimitOffsetPagination
 
@@ -174,7 +174,7 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = AnalysisGroupSerializer
     queryset = AnalysisGroup.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'name', 'created_at']
@@ -357,7 +357,7 @@ class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ProjectFileSerializer
     queryset = ProjectFile.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
 
@@ -487,7 +487,7 @@ class ComparisonMatrixViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = ComparisonMatrixSerializer
     queryset = ComparisonMatrix.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
 
@@ -524,7 +524,7 @@ class SampleAnnotationViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = SampleAnnotationSerializer
     queryset = SampleAnnotation.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
 
@@ -563,7 +563,7 @@ class SearchResultViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = SearchResultSerializer
     queryset = SearchResult.objects.all()
     permission_classes = [permissions.AllowAny]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
     filter_backends = [SearchFilter, OrderingFilter]
@@ -631,7 +631,7 @@ class SearchSessionViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = SearchSessionSerializer
     queryset = SearchSession.objects.all()
     permission_classes = [permissions.AllowAny]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser,JSONParser)
     pagination_class = LimitOffsetPagination
     filter_backends  = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -748,7 +748,7 @@ class SpeciesViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = SpeciesSerializer
     queryset = Species.objects.all()
     permission_classes = [permissions.AllowAny]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     pagination_class = LimitOffsetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -788,7 +788,7 @@ class SubcellularLocationViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = SubcellularLocationSerializer
     queryset = SubcellularLocation.objects.all()
     permission_classes = [permissions.AllowAny]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     pagination_class = LimitOffsetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -803,7 +803,7 @@ class TissueViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = TissueSerializer
     queryset = Tissue.objects.all()
     permission_classes = [permissions.AllowAny]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     pagination_class = LimitOffsetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -818,7 +818,7 @@ class HumanDiseaseViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = HumanDiseaseSerializer
     queryset = HumanDisease.objects.all()
     permission_classes = [permissions.AllowAny]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     pagination_class = LimitOffsetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -832,7 +832,7 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = CollateSerializers
     queryset = Collate.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'title', 'created_at']
@@ -927,7 +927,7 @@ class CollateTagViewSet(viewsets.ModelViewSet, FilterMixin):
     serializer_class = CollateTagSerializer
     queryset = CollateTag.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'name', 'created_at']
@@ -1106,7 +1106,7 @@ class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer
     queryset = LabGroup.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'name', 'created_at']
@@ -1148,6 +1148,7 @@ class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     def add_member(self, request, pk=None):
         user_id = request.data['user']
         user = User.objects.get(id=user_id)
+        print(user, self.request.user)
         if self.request.user != user:
             if not self.request.user.is_staff:
                 if not self.request.user in self.get_object().managing_members.all():
@@ -1174,7 +1175,7 @@ class SourceFileViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = SourceFileSerializer
     queryset = SourceFile.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     filter_backends = [SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'name', 'created_at']
@@ -1243,7 +1244,7 @@ class MetadataColumnViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = MetadataColumnSerializer
     queryset = MetadataColumn.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['id', 'name', 'created_at']
@@ -1393,7 +1394,7 @@ class MSUniqueVocabulariesViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = MSUniqueVocabulariesSerializer
     queryset = MSUniqueVocabularies.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering_fields = ['accession', 'name']
@@ -1437,7 +1438,7 @@ class UnimodViewSets(FilterMixin, viewsets.ModelViewSet):
     serializer_class = UnimodSerializer
     queryset = Unimod.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     parser_classes = (MultiPartParser, JSONParser)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = UnimodFilter
