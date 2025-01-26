@@ -1094,10 +1094,10 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def get_profile(self, request):
-        user = self.get_object()
-        if user.profile:
-            profile = user.profile
-        else:
+        user: User = self.request.user
+        try:
+            profile = UserProfile.objects.get(user=user)
+        except UserProfile.DoesNotExist:
             profile = UserProfile.objects.create(user=user)
         data = UserProfileSerializer(profile).data
         return Response(data, status=status.HTTP_200_OK)

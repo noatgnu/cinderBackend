@@ -1,5 +1,6 @@
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+from django.contrib.auth.models import User
 
 from cb.models import UserProfile
 
@@ -27,9 +28,8 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         return False
     def save_user(self, request, user, form, commit=True):
         user = super().save_user(request, user, form, commit=False)
-        if commit:
-            user.save()
-            UserProfile.objects.create(user=user, created_by_allauth=True)
+        user.save()
+        UserProfile.objects.create(user=user, created_by_allauth=True)
         return user
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
@@ -38,4 +38,9 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
             user = sociallogin.user
             if not user.username:
                 user.username = user.email
-            user.save()
+            try:
+                existing_user = User.objects.get(email=user.email)
+                sociallogin.connect(request, existing_user)
+            except User.DoesNotExist:
+                user.save()
+                UserProfile.objects.create(user=user, created_by_allauth=True)
