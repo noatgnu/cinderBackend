@@ -6,7 +6,7 @@ from rest_framework import serializers
 
 from cb.models import Project, ProjectFile, AnalysisGroup, SampleAnnotation, ComparisonMatrix, SearchResult, \
     SearchSession, Species, CurtainData, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn, SubcellularLocation, \
-    Tissue, HumanDisease, MSUniqueVocabularies, Unimod
+    Tissue, HumanDisease, MSUniqueVocabularies, Unimod, UserProfile
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -183,6 +183,12 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'is_staff', 'first_name', 'last_name', 'email']
+
+class UserProfileSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = UserProfile
+        fields = "__all__"
 
 class LabGroupSerializer(serializers.ModelSerializer):
     managers = serializers.SerializerMethodField()

@@ -30,12 +30,12 @@ from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
     SearchSession, Species, CurtainData, Abs, Collate, CollateTag, LabGroup, SourceFile, MetadataColumn, \
-    SubcellularLocation, Tissue, HumanDisease, MSUniqueVocabularies, Unimod
+    SubcellularLocation, Tissue, HumanDisease, MSUniqueVocabularies, Unimod, UserProfile
 from cb.serializers import ProjectSerializer, AnalysisGroupSerializer, ProjectFileSerializer, \
     ComparisonMatrixSerializer, SampleAnnotationSerializer, SearchResultSerializer, SearchSessionSerializer, \
     SpeciesSerializer, CurtainDataSerializer, CollateSerializers, CollateTagSerializer, UserSerializer, \
     LabGroupSerializer, SourceFileSerializer, MetadataColumnSerializer, SubcellularLocationSerializer, TissueSerializer, \
-    HumanDiseaseSerializer, MSUniqueVocabulariesSerializer, UnimodSerializer
+    HumanDiseaseSerializer, MSUniqueVocabulariesSerializer, UnimodSerializer, UserProfileSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
@@ -995,7 +995,8 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         if not request.user.is_staff:
             return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
-        User.objects.create_user(request.data['username'], request.data['email'], request.data['password'], request.data['first_name'], request.data['last_name'])
+        u = User.objects.create_user(request.data['username'], request.data['email'], request.data['password'], request.data['first_name'], request.data['last_name'])
+        UserProfile.objects.create(user=u)
         return Response(status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
@@ -1089,8 +1090,17 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
     @ensure_csrf_cookie
     @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
     def set_csrf(self, request):
-        return Response(status=status.HTTP_200_OK)
+        return Response(data={"detail": "csrf cookie set"},status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def get_profile(self, request):
+        user = self.get_object()
+        if user.profile:
+            profile = user.profile
+        else:
+            profile = UserProfile.objects.create(user=user)
+        data = UserProfileSerializer(profile).data
+        return Response(data, status=status.HTTP_200_OK)
 
 class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer

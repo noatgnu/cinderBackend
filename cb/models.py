@@ -1418,6 +1418,18 @@ class Unimod(models.Model):
     def __str__(self):
         return self.accession
 
+class UserProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by_allauth = models.BooleanField(default=False)
+
+    class Meta:
+        app_label = 'cb'
+
+    def __str__(self):
+        return self.user.username
+
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):

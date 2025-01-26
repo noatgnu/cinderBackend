@@ -2,7 +2,7 @@ FROM node:20-bullseye-slim
 
 ARG BUILD_DATE
 ENV API_HOST=localhost
-ENV KEYCLOAK_CALLBACK_URL=cinder.proteo.info
+ENV KEYCLOAK_CALLBACK_URL=localhost
 
 WORKDIR /app
 RUN apt update

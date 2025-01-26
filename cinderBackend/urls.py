@@ -19,7 +19,7 @@ from django.urls import path, include
 from rest_framework import routers
 from rest_framework.authtoken.views import obtain_auth_token
 
-from cb.views import DataChunkedUploadView, LogoutView, FrontEndTemplateView
+from cb.views import DataChunkedUploadView, LogoutView, FrontEndTemplateView, set_csrf
 from cb.viewsets import ProjectViewSet, ProjectFileViewSet, AnalysisGroupViewSet, SampleAnnotationViewSet, \
     ComparisonMatrixViewSet, SearchResultViewSet, SearchSessionViewSet, SpeciesViewSet, CollateViewSet, \
     CollateTagViewSet, UserViewSet, LabGroupViewSet, TissueViewSet, SubcellularLocationViewSet, HumanDiseaseViewSet, \
@@ -54,6 +54,7 @@ urlpatterns = [
     path('api/chunked_upload/<uuid:pk>/', DataChunkedUploadView.as_view(), name='chunkedupload-detail'),
     path('api/logout/', LogoutView.as_view(), name='logout'),
     path('api/frontend_template/', FrontEndTemplateView.as_view(), name='frontend_template'),
+    path("api/set-csrf/", set_csrf, name="set_csrf"),
     path('accounts/', include('allauth.urls')),
     path("_allauth/", include("allauth.headless.urls")),
 ]

@@ -1,6 +1,8 @@
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 
+from cb.models import UserProfile
+
 
 class NoNewUserSignupAdapter(DefaultAccountAdapter):
     def is_open_for_signup(self, request):
@@ -25,7 +27,9 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         return False
     def save_user(self, request, user, form, commit=True):
         user = super().save_user(request, user, form, commit=False)
-        user.save()
+        if commit:
+            user.save()
+            UserProfile.objects.create(user=user, created_by_allauth=True)
         return user
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):

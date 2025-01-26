@@ -1,7 +1,9 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_chunked_upload.exceptions import ChunkedUploadError
 from drf_chunked_upload.views import ChunkedUploadView
 from rest_framework import status
@@ -125,3 +127,7 @@ class FrontEndTemplateView(APIView):
 
     def get(self, request):
         return Response({"footer":settings.FRONTEND_FOOTER}, status=status.HTTP_200_OK)
+
+@ensure_csrf_cookie
+def set_csrf(request):
+    return JsonResponse(data={"data": "CSRF cookie set"}, status=status.HTTP_200_OK)

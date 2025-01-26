@@ -24,6 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-h*l(4%186s&#*z1-!8url$m5yx7llku!i0$wf1ccv&+b_sed8l'
+if os.environ.get("SECRET_KEY", None):
+    SECRET_KEY = os.environ.get("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -200,7 +202,13 @@ CORS_ALLOW_HEADERS = [
     'x-session-token',
     'http-x-session-token',
 ]
-
+CSRF_FAILURE_VIEW = "cb.csrf_failure.csrf_failure"
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_NAME = "csrfToken"
+CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
+CSRF_TRUSTED_ORIGINS = os.environ.get("CSRF_TRUSTED_ORIGINS", "http://localhost:4200").split(",")
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost").split(",")
 CORS_ORIGIN_WHITELIST = os.environ.get("CORS_ORIGIN_WHITELIST", "http://localhost:4200").split(",")
 CORS_ALLOW_METHODS = [
     "DELETE",
@@ -210,8 +218,6 @@ CORS_ALLOW_METHODS = [
     "POST",
     "PUT"
 ]
-
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost").split(",")
 
 DBBACKUP_STORAGE = 'django.core.files.storage.FileSystemStorage'
 DBBACKUP_STORAGE_OPTIONS = {
@@ -283,8 +289,6 @@ STORAGES = {
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
-CSRF_COOKIE_NAME = "csrfToken"
-CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
 # DRF Chunked Upload settings
 
 DRF_CHUNKED_UPLOAD_ABSTRACT_MODEL = False
@@ -297,9 +301,6 @@ CURTAIN_HOST = os.environ.get("CURTAIN_HOST", "https://celsus.muttsu.xyz")
 FRONTEND_FOOTER = os.environ.get("FRONTEND_FOOTER", "MRC-PPU, University of Dundee. ASAP.")
 
 HEADLESS_ONLY = True
-
-
-
 SOCIALACCOUNT_PROVIDERS = {
     "openid_connect": {
         "APPS": [
@@ -341,11 +342,11 @@ if os.environ.get("KEYCLOAK_CLIENT_ID", None):
         }
     )
 
-    HEADLESS_FRONTEND_URLS = {
+    #HEADLESS_FRONTEND_URLS = {
         #"account_confirm_email": "https://app.project.org/account/verify-email/{key}",
         #"account_reset_password_from_key": "https://app.org/account/password/reset/key/{key}",
         #"account_signup": "https://app.org/account/signup",
-    }
+    #}
 
     HEADLESS_TOKEN_STRATEGY = "cb.token_strategy.TokenStrategy"
     ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'

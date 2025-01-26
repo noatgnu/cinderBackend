@@ -7,15 +7,8 @@ services:
     container_name: cinderbackend
     ports:
       - "8000:8000"
-    environment:
-      - POSTGRES_NAME=postgres
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_HOST=dbcinderbackend
-      - REDIS_HOST=rediscinderbackend
-      - CORS_ORIGIN_WHITELIST=http://localhost,http://localhost:4200,http://172.31.0.5
-      - ALLOWED_HOSTS=localhost,172.31.0.5,localhost:8000
+    env_file:
+      - .env
     networks:
       - cinderbackend-net
     volumes:
@@ -28,13 +21,8 @@ services:
       dockerfile: ./dockerfiles/Dockerfile
     container_name: cinderbackend-worker
     command: python manage.py rqworker default
-    environment:
-      - POSTGRES_NAME=postgres
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_HOST=dbcinderbackend
-      - REDIS_HOST=rediscinderbackend
+    env_file:
+      - .env
     networks:
       - cinderbackend-net
     volumes:
@@ -43,7 +31,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: ./dockerfiles/Dockerfile-frontend
+      dockerfile: ./dockerfiles/Dockerfile-frontend-dev
     container_name: frontend
     ports:
       - "3000:80"
