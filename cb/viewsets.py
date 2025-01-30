@@ -1125,7 +1125,7 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
                     }
                     server_realm = keycloak["settings"]["server_url"].replace(".well-known/openid-configuration", "")
                     result = requests.post(f"{server_realm}/protocol/openid-connect/logout", data=logout_payload, headers=headers)
-                    print(result)
+                    social_token.delete()
         return Response(status=status.HTTP_200_OK)
 class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer
