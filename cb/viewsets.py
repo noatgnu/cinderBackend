@@ -6,6 +6,7 @@ import uuid
 import pandas as pd
 import requests
 from allauth.socialaccount.models import SocialAccount, SocialToken, SocialApp
+from django.contrib.auth import logout
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.db import transaction
 from django.db.models import Q, Max
@@ -1108,24 +1109,27 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
     def logout_provider(self, request):
         user: User = request.user
         social_account = SocialAccount.objects.filter(user=user).first()
-        social_token = SocialToken.objects.get(account__user=user)
-        access_token = social_token.token
-        refresh_token = social_token.token_secret
-        if social_account.provider == 'keycloak':
-            for i in settings.SOCIALACCOUNT_PROVIDERS["openid_connect"]["APPS"]:
-                if i["provider_id"] == "keycloak":
-                    keycloak = i
-                    logout_payload = {
-                        "client_id": keycloak["client_id"],
-                        "refresh_token": refresh_token,
-                        "client_secret": keycloak["secret"],
-                    }
-                    headers = {
-                        "Authorization": "Bearer " + access_token, "Content-Type": "application/x-www-form-urlencoded"
-                    }
-                    server_realm = keycloak["settings"]["server_url"].replace(".well-known/openid-configuration", "")
-                    result = requests.post(f"{server_realm}/protocol/openid-connect/logout", data=logout_payload, headers=headers)
-                    social_token.delete()
+        social_token = SocialToken.objects.filter(account__user=user)
+        if social_token.exists():
+            social_token = social_token.first()
+            access_token = social_token.token
+            refresh_token = social_token.token_secret
+            if social_account.provider == 'keycloak':
+                for i in settings.SOCIALACCOUNT_PROVIDERS["openid_connect"]["APPS"]:
+                    if i["provider_id"] == "keycloak":
+                        keycloak = i
+                        logout_payload = {
+                            "client_id": keycloak["client_id"],
+                            "refresh_token": refresh_token,
+                            "client_secret": keycloak["secret"],
+                        }
+                        headers = {
+                            "Authorization": "Bearer " + access_token, "Content-Type": "application/x-www-form-urlencoded"
+                        }
+                        server_realm = keycloak["settings"]["server_url"].replace(".well-known/openid-configuration", "")
+                        result = requests.post(f"{server_realm}/protocol/openid-connect/logout", data=logout_payload, headers=headers)
+                        social_token.delete()
+        logout(request)
         return Response(status=status.HTTP_200_OK)
 class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer
