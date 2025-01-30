@@ -8,6 +8,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 class TokenStrategy(AbstractTokenStrategy):
     def create_access_token(self, request: HttpRequest) -> Optional[str]:
+        user = request.user
+        if user.is_authenticated:
+            refresh = RefreshToken.for_user(user)
+            return str(refresh.access_token)
         return None
 
     def create_access_token_payload(self, request: HttpRequest) -> Optional[dict]:

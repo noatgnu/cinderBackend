@@ -1108,24 +1108,18 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
     def logout_provider(self, request):
         user: User = request.user
         social_account = SocialAccount.objects.filter(user=user).first()
-        social_token = SocialToken.objects.get(account__user=user)
-        access_token = social_token.token
-        refresh_token = social_token.token_secret
+
         if social_account.provider == 'keycloak':
             for i in settings.SOCIALACCOUNT_PROVIDERS["openid_connect"]["APPS"]:
                 if i["provider_id"] == "keycloak":
                     keycloak = i
-                    social_app = SocialApp.objects.get(provider_id="keycloak")
                     logout_payload = {
-                        "client_id": social_app.client_id,
-                        "refresh_token": refresh_token,
-                        "client_secret": social_app.secret,
+                        "client_id": keycloak["client_id"],
+                        "client_secret": keycloak["secret"],
                     }
-                    headers = {
-                        "Authorization": "Bearer " + access_token, "Content-Type": "application/x-www-form-urlencoded"
-                    }
+
                     server_realm = keycloak["settings"]["server_url"].replace(".well-known/openid-configuration", "")
-                    result = requests.post(f"{server_realm}/protocol/openid-connect/logout", data=logout_payload, headers=headers)
+                    result = requests.post(f"{server_realm}/protocol/openid-connect/logout", data=logout_payload)
         return Response(status=status.HTTP_200_OK)
 class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer

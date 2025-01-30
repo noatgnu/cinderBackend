@@ -330,6 +330,7 @@ if os.environ.get("SECURE_SSL_REDIRECT", "True") == "True":
     SECURE_SSL_REDIRECT = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 if os.environ.get("KEYCLOAK_CLIENT_ID", None):
+    SOCIALACCOUNT_STORE_TOKENS = True
     SOCIALACCOUNT_PROVIDERS["openid_connect"]["APPS"].append(
         {
             "provider_id": "keycloak",
