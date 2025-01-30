@@ -4,6 +4,8 @@ import re
 import uuid
 
 import pandas as pd
+import requests
+from allauth.socialaccount.models import SocialAccount, SocialToken, SocialApp
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.db import transaction
 from django.db.models import Q, Max
@@ -1102,6 +1104,29 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
         data = UserProfileSerializer(profile).data
         return Response(data, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def logout_provider(self, request):
+        user: User = request.user
+        social_account = SocialAccount.objects.filter(user=user).first()
+        social_token = SocialToken.objects.get(account__user=user)
+        access_token = social_token.token
+        refresh_token = social_token.token_secret
+        if social_account.provider == 'keycloak':
+            for i in settings.SOCIALACCOUNT_PROVIDERS["openid_connect"]["APPS"]:
+                if i["provider_id"] == "keycloak":
+                    keycloak = i
+                    social_app = SocialApp.objects.get(provider_id="keycloak")
+                    logout_payload = {
+                        "client_id": social_app.client_id,
+                        "refresh_token": refresh_token,
+                        "client_secret": social_app.secret,
+                    }
+                    headers = {
+                        "Authorization": "Bearer " + access_token, "Content-Type": "application/x-www-form-urlencoded"
+                    }
+                    server_realm = keycloak["settings"]["server_url"].replace(".well-known/openid-configuration", "")
+                    result = requests.post(f"{server_realm}/protocol/openid-connect/logout", data=logout_payload, headers=headers)
+        return Response(status=status.HTTP_200_OK)
 class LabGroupViewSet(FilterMixin, viewsets.ModelViewSet):
     serializer_class = LabGroupSerializer
     queryset = LabGroup.objects.all()
