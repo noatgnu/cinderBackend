@@ -1104,7 +1104,7 @@ class UserViewSet(FilterMixin, viewsets.ModelViewSet):
         data = UserProfileSerializer(profile).data
         return Response(data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def logout_provider(self, request):
         user: User = request.user
         social_account = SocialAccount.objects.filter(user=user).first()
