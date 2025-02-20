@@ -255,26 +255,38 @@ def create_sdrf_array_from_metadata(analysis_group_id):
                         elif name == "label":
                             vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="sample attribute")
                             if vocab.exists():
-                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                                if "AC=" not in column.value:
+                                    row.append(f"AC={vocab.first().accession};NT={column.value}")
+                                else:
+                                    row.append(f"NT={column.value}")
                             else:
                                 row.append(f"{column.value}")
                         elif name == "cleavage agent details":
                             vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="cleavage agent")
                             if vocab.exists():
-                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                                if "AC=" not in column.value:
+                                    row.append(f"AC={vocab.first().accession};NT={column.value}")
+                                else:
+                                    row.append(f"NT={column.value}")
                             else:
                                 row.append(f"{column.value}")
                         elif name == "instrument":
                             vocab = MSUniqueVocabularies.objects.filter(name=column.value, term_type="instrument")
                             if vocab.exists():
-                                row.append(f"AC={vocab.first().accession};NT={column.value}")
+                                if "AC=" not in column.value:
+                                    row.append(f"AC={vocab.first().accession};NT={column.value}")
+                                else:
+                                    row.append(f"NT={column.value}")
                             else:
                                 row.append(f"{column.value}")
                         elif name == "modification parameters":
                             splitted = column.value.split(";")
                             unimod = Unimod.objects.filter(name=splitted[0])
                             if unimod.exists():
-                                row.append(f"AC={unimod.first().accession};NT={column.value}")
+                                if "AC=" in column.value:
+                                    row.append(f"NT={column.value}")
+                                else:
+                                    row.append(f"AC={unimod.first().accession};NT={column.value}")
                             else:
                                 row.append(f"{column.value}")
                         elif name == "dissociation method":

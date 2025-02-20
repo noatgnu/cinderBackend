@@ -51,6 +51,7 @@ def load_instrument():
 
     load_ebi_resource("https://www.ebi.ac.uk/ols4/api/ontologies/efo/terms/http%253A%252F%252Fwww.ebi.ac.uk%252Fefo%252FEFO_0009090/hierarchicalDescendants", 1000, "Enrichment process")
 
+    load_ebi_resource("https://www.ebi.ac.uk/ols4/api/ontologies/pride/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FPRIDE_0000550/hierarchicalDescendants", 1000, "Fractionation method")
 def load_ebi_resource(base_url: str, size: int = 20, term_type: str = "sample attribute"):
     response = requests.get(base_url+"?page=0&size="+str(size))
     data = response.json()
