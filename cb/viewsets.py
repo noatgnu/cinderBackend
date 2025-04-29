@@ -68,7 +68,7 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
         # check if the Project is public. If not, check if the user is authenticated and is the owner of the Project or the Project is share_with the user.
         current_user = self.request.user
         if current_user.is_authenticated:
-            query &= Q(public=True) | Q(user=current_user) | Q(share_with__in=current_user)
+            query &= Q(public=True) | Q(user=current_user) | Q(share_with=current_user)
         else:
             query &= Q(public=True)
 
@@ -211,7 +211,7 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
 
         # check if the Project of the AnalysisGroup is public. If not, check if the user is authenticated and is the owner of the Project or the Project is share_with the user.
         if current_user.is_authenticated:
-            query &= Q(project__public=True) | Q(project__user=current_user) | Q(project__share_with__in=current_user)
+            query &= Q(project__public=True) | Q(project__user=current_user) | Q(project__share_with=current_user)
         else:
             query &= Q(project__public=True)
 
