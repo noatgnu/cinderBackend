@@ -65,6 +65,13 @@ class ProjectViewSet(viewsets.ModelViewSet, FilterMixin):
             query &= Q(user__lab_groups__id__in=lab_group.split(","))
         if users:
             query &= Q(user__id__in=users.split(","))
+        # check if the Project is public. If not, check if the user is authenticated and is the owner of the Project or the Project is shared_with the user.
+        current_user = self.request.user
+        if current_user.is_authenticated:
+            query &= Q(is_public=True) | Q(user=current_user) | Q(shared_with__in=current_user)
+        else:
+            query &= Q(is_public=True)
+
         return queryset.filter(query)
 
     def get_object(self):
@@ -201,7 +208,13 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
             query &= Q(project__user__lab_groups__id__in=lab_group.split(","))
         if users:
             query &= Q(project__user__id__in=users.split(","))
-        query &= Q(project__public=True) | Q(project__user=current_user)
+
+        # check if the Project of the AnalysisGroup is public. If not, check if the user is authenticated and is the owner of the Project or the Project is shared_with the user.
+        if current_user.is_authenticated:
+            query &= Q(project__is_public=True) | Q(project__user=current_user) | Q(project__shared_with__in=current_user)
+        else:
+            query &= Q(project__is_public=True)
+
         return queryset.filter(query)
 
     def create(self, request, *args, **kwargs):
@@ -863,7 +876,8 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
 
         if current_user.is_authenticated:
             query &= Q(users=current_user) | Q(share_with=current_user) | Q(public=True)
-
+        else:
+            query &= Q(public=True)
         return self.queryset.filter(query).distinct()
 
     def create(self, request, *args, **kwargs):
