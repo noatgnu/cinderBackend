@@ -298,11 +298,14 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
         if not request.user.is_authenticated:
             return Response(status=status.HTTP_403_FORBIDDEN)
         if request.user.is_staff:
-            return Response({"edit": True}, status=status.HTTP_200_OK)
+            return Response({"edit": True, "view": True}, status=status.HTTP_200_OK)
         analysis_group = self.get_object()
         if analysis_group.project.user == request.user:
-            return Response({"edit": True}, status=status.HTTP_200_OK)
+            return Response({"edit": True, "view": True}, status=status.HTTP_200_OK)
         else:
+            if analysis_group.project.share_with.filter(id=request.user.id).exists() or self.get_object().share_with.filter(id=request.user.id).exists():
+                return Response({"edit": False, "view": True}, status=status.HTTP_200_OK)
+
             return Response({"edit": False}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
