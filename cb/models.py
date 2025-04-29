@@ -20,7 +20,7 @@ from django.db.models import Func
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
-from django.conf import settings
+from django.conf import settings as django_settings
 
 import cb
 from cb.utils import default_columns
@@ -59,11 +59,13 @@ class Project(models.Model):
     metadata = models.TextField(blank=True, null=True)
     global_id = models.CharField(max_length=255)
     temporary = models.BooleanField(default=False)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='projects')
+    user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='projects')
     encrypted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     species = models.ForeignKey("Species", on_delete=models.CASCADE, related_name="projects", blank=True, null=True)
+    share_with = models.ManyToManyField(django_settings.AUTH_USER_MODEL, related_name='shared_projects', blank=True)
+    public = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['created_at']
@@ -336,7 +338,7 @@ class SearchSession(models.Model):
     search_term = models.TextField()
     session_id = models.CharField(max_length=255, blank=True, null=True)
     analysis_groups = models.ManyToManyField(AnalysisGroup, related_name='search_sessions', blank=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='search_sessions', blank=True, null=True)
+    user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='search_sessions', blank=True, null=True)
     found_terms = models.TextField(blank=True, null=True)
     completed = models.BooleanField(default=False)
     pending = models.BooleanField(default=True)
@@ -1179,7 +1181,7 @@ class Collate(models.Model):
     projects = models.ManyToManyField(Project, related_name='collates', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='collates', blank=True)
+    users = models.ManyToManyField(django_settings.AUTH_USER_MODEL, related_name='collates', blank=True)
     settings = models.JSONField(blank=True, null=True)
     data_type_choices = [
         ('proteomics', 'Proteomics'),
@@ -1191,6 +1193,8 @@ class Collate(models.Model):
         ('glycoproteomics', 'Glycoproteomics'),
     ]
     data_type = models.CharField(max_length=255, choices=data_type_choices, default='proteomics', blank=True, null=True)
+    public = models.BooleanField(default=True)
+    share_with = models.ManyToManyField(django_settings.AUTH_USER_MODEL, related_name='shared_collates', blank=True)
 
 
     class Meta:
@@ -1219,8 +1223,8 @@ class LabGroup(models.Model):
     name = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='lab_groups', blank=True)
-    managing_members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='managing_lab_groups', blank=True)
+    members = models.ManyToManyField(django_settings.AUTH_USER_MODEL, related_name='lab_groups', blank=True)
+    managing_members = models.ManyToManyField(django_settings.AUTH_USER_MODEL, related_name='managing_lab_groups', blank=True)
 
     class Meta:
         ordering = ['created_at']
@@ -1235,7 +1239,7 @@ class SourceFile(models.Model):
     file = models.FileField(upload_to='source_files', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='source_files', blank=True, null=True)
+    user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='source_files', blank=True, null=True)
     analysis_group = models.ForeignKey(AnalysisGroup, on_delete=models.CASCADE, related_name='source_files', blank=True, null=True)
 
     class Meta:
@@ -1419,7 +1423,7 @@ class Unimod(models.Model):
         return self.accession
 
 class UserProfile(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
+    user = models.OneToOneField(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by_allauth = models.BooleanField(default=False)
@@ -1430,11 +1434,7 @@ class UserProfile(models.Model):
     def __str__(self):
         return self.user.username
 
-
-
-
-
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+@receiver(post_save, sender=django_settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):
     if created:
         Token.objects.create(user=instance)

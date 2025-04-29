@@ -187,6 +187,7 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        current_user = self.request.user
         query = Q()
         project = self.request.query_params.get('project', None)
         lab_group = self.request.query_params.get('lab_group', None)
@@ -200,6 +201,7 @@ class AnalysisGroupViewSet(viewsets.ModelViewSet, FilterMixin):
             query &= Q(project__user__lab_groups__id__in=lab_group.split(","))
         if users:
             query &= Q(project__user__id__in=users.split(","))
+        query &= Q(project__public=True) | Q(project__user=current_user)
         return queryset.filter(query)
 
     def create(self, request, *args, **kwargs):
@@ -847,6 +849,7 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
         tag_ids = self.request.query_params.get('tag_ids', None)
         lab_group = self.request.query_params.get('lab_group', None)
         users = self.request.query_params.get('users', None)
+        current_user = self.request.user
         query = Q()
         if tag_ids:
             tags = CollateTag.objects.filter(id__in=tag_ids.split(","))
@@ -858,6 +861,8 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
         if users:
             query &= Q(users__id__in=users.split(","))
 
+        if current_user.is_authenticated:
+            query &= Q(users=current_user) | Q(share_with=current_user) | Q(public=True)
 
         return self.queryset.filter(query).distinct()
 
@@ -924,6 +929,26 @@ class CollateViewSet(viewsets.ModelViewSet, FilterMixin):
             return Response({"edit": True}, status=status.HTTP_200_OK)
         else:
             return Response({"edit": False}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def add_users_to_share(self, request, pk=None):
+        collate = self.get_object()
+        users = request.data['users']
+        users = User.objects.filter(id__in=users)
+        for user in users:
+            collate.share_with.add(user)
+        collate.save()
+        return Response(CollateSerializers(collate).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def remove_users_from_share(self, request, pk=None):
+        collate = self.get_object()
+        users = request.data['users']
+        users = User.objects.filter(id__in=users)
+        for user in users:
+            collate.share_with.remove(user)
+        collate.save()
+        return Response(CollateSerializers(collate).data, status=status.HTTP_200_OK)
 
 
 class CollateTagViewSet(viewsets.ModelViewSet, FilterMixin):
