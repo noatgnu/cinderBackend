@@ -1012,7 +1012,7 @@ class CurtainData(models.Model):
         except:
             searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
 
-        media_folder = os.path.join(settings.MEDIA_ROOT, "user_files")
+        media_folder = os.path.join(django_settings.MEDIA_ROOT, "user_files")
         if not os.path.exists(media_folder):
             os.makedirs(media_folder)
         diff_file_path = os.path.join(media_folder, f"{uuid.uuid4().hex}.diff.txt")
