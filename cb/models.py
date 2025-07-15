@@ -2,6 +2,7 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import subprocess
@@ -24,6 +25,9 @@ from django.conf import settings as django_settings
 
 import cb
 from cb.utils import default_columns
+from cb.curtain.enhanced_processor import EnhancedCurtainProcessor, CurtainProgressTracker
+
+logger = logging.getLogger(__name__)
 
 
 # if settings.DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
@@ -898,8 +902,94 @@ class CurtainData(models.Model):
         self.save()
 
     def get_curtain_data(self, session_id=None):
+        """Enhanced method using enhanced processor for better performance"""
+        try:
+            # Use enhanced processor for better performance and caching
+            processor = EnhancedCurtainProcessor()
+            client = CurtainClient(self.host)
+            
+            # Process with enhanced progress tracking and caching
+            data = processor.process_curtain_data_enhanced(client, self.link_id, session_id)
+            
+            if not data:
+                raise Exception("Failed to download Curtain data")
+                
+            # Continue with existing processing logic (backward compatible)
+            differential_analysis_file = self.analysis_group.project_files.filter(file_category="df").first()
+
+            if data["processed"]:
+                try:
+                    sniffer = csv.Sniffer()
+                    sample = data["processed"][:1024]
+                    dialect = sniffer.sniff(sample)
+                    diff_df = pd.read_csv(
+                        io.StringIO(data["processed"]),
+                        sep=dialect.delimiter,
+                        quotechar=dialect.quotechar
+                    )
+                except:
+                    diff_df = pd.read_csv(io.StringIO(data["processed"]), sep=None)
+            else:
+                diff_df = pd.read_csv(differential_analysis_file.file.path, sep=differential_analysis_file.get_delimiter())
+            primary_id_col = data["differentialForm"]["_primaryIDs"]
+            fold_change_col = data["differentialForm"]["_foldChange"]
+            p_value_col = data["differentialForm"]["_significant"]
+            ptm_data = {}
+            if "_accession" in data["differentialForm"]:
+                ptm_data["accession_col"] = data["differentialForm"]["_accession"]
+            if "_position" in data["differentialForm"]:
+                ptm_data["position_col"] = data["differentialForm"]["_position"]
+            if "_positionPeptide" in data["differentialForm"]:
+                ptm_data["position_peptide_col"] = data["differentialForm"]["_positionPeptide"]
+            if "_score" in data["differentialForm"]:
+                ptm_data["score_col"] = data["differentialForm"]["_score"]
+            if "_peptideSequence" in data["differentialForm"]:
+                ptm_data["peptide_seq_col"] = data["differentialForm"]["_peptideSequence"]
+            if data["differentialForm"]["_comparison"]:
+                comparison_col = data["differentialForm"]["_comparison"]
+                if data["differentialForm"]["_comparisonSelect"]:
+                    comparison_label = data["differentialForm"]["_comparisonSelect"]
+                    diff_df[comparison_col] = diff_df[comparison_col].astype(str)
+                    if isinstance(comparison_label, str):
+                        comparison_label = [comparison_label]
+                    diff_df = diff_df[diff_df[comparison_col].isin(comparison_label)]
+
+            if data["differentialForm"]["_transformFC"]:
+                diff_df[fold_change_col] = np.log2(diff_df[fold_change_col])
+            if data["differentialForm"]["_transformSignificant"]:
+                diff_df[p_value_col] = -np.log10(diff_df[p_value_col])
+            if data["differentialForm"]["_reverseFoldChange"]:
+                diff_df[fold_change_col] = -diff_df[fold_change_col]
+            self.parse_curtain_data(data, diff_df, primary_id_col, fold_change_col, p_value_col, data["differentialForm"]["_comparison"])
+            
+        except Exception as e:
+            # Fallback to original method if enhanced processor fails
+            logger.error(f"Enhanced processor failed, falling back to original method: {e}")
+            return self._get_curtain_data_original(session_id)
+    
+    def _get_curtain_data_original(self, session_id=None):
+        """Original method preserved as fallback"""
         client = CurtainClient(self.host)
         channel_layer = get_channel_layer()
+        
+        def progress_callback(downloaded_bytes, total_bytes, percentage):
+            if session_id:
+                try:
+                    async_to_sync(channel_layer.group_send)(
+                        f"curtain_{session_id}", {
+                            "type": "curtain_message", "message": {
+                                "type": "curtain_progress",
+                                "status": "downloading",
+                                "id": self.id,
+                                "downloaded_bytes": downloaded_bytes,
+                                "total_bytes": total_bytes,
+                                "percentage": round(percentage, 2),
+                                "message": f"Downloading data from Curtain ({percentage:.1f}%)"
+                            }})
+                except Exception as e:
+                    # Log the error but don't let it interrupt the download
+                    print(f"Failed to send progress update: {e}")
+        
         if session_id:
             async_to_sync(channel_layer.group_send)(
                 f"curtain_{session_id}", {
@@ -907,10 +997,19 @@ class CurtainData(models.Model):
                         "type": "curtain_status",
                         "status": "in_progress",
                         "id": self.id,
-                        "message": "Downloading data from Curtain"
+                        "message": "Starting download from Curtain"
                     }})
-        data = client.download_curtain_session(self.link_id)
+        data = client.download_curtain_session(self.link_id, progress_callback=progress_callback)
         if session_id:
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "curtain_progress",
+                        "status": "download_complete",
+                        "id": self.id,
+                        "percentage": 100.0,
+                        "message": "Download complete, parsing data from Curtain"
+                    }})
             async_to_sync(channel_layer.group_send)(
                 f"curtain_{session_id}", {
                     "type": "curtain_message", "message": {
@@ -967,8 +1066,293 @@ class CurtainData(models.Model):
         self.parse_curtain_data(data, diff_df, primary_id_col, fold_change_col, p_value_col, data["differentialForm"]["_comparison"])
 
     def compose_analysis_group_from_curtain_data(self, analysis_group: AnalysisGroup, session_id=None):
+        """Enhanced method using enhanced processor and bulk operations"""
+        try:
+            # Use enhanced processor for better performance
+            processor = EnhancedCurtainProcessor()
+            client = CurtainClient(self.host)
+            
+            # Process with enhanced progress tracking and caching
+            data = processor.process_curtain_data_enhanced(client, self.link_id, session_id, analysis_group.id)
+            
+            if not data:
+                raise Exception("Failed to download Curtain data")
+            
+            # Use database transaction for atomicity
+            with transaction.atomic():
+                # Remove existing files to avoid conflicts
+                analysis_group.project_files.filter(file_category__in=["searched", "df"]).delete()
+                
+                # Continue with existing file processing logic (backward compatible)
+                try:
+                    sniffer = csv.Sniffer()
+                    sample = data["processed"][:1024]
+                    dialect = sniffer.sniff(sample)
+                    diff_file = pd.read_csv(
+                        io.StringIO(data["processed"]),
+                        sep=dialect.delimiter,
+                        quotechar=dialect.quotechar
+                    )
+                except:
+                    diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
+                try:
+                    sniffer = csv.Sniffer()
+                    sample = data["raw"][:1024]
+                    dialect = sniffer.sniff(sample)
+                    searched_file = pd.read_csv(
+                        io.StringIO(data["raw"]),
+                        sep=dialect.delimiter,
+                        quotechar=dialect.quotechar
+                    )
+                except:
+                    searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
+                
+                # Update progress for file creation phase
+                progress_tracker = None
+                if session_id:
+                    progress_tracker = CurtainProgressTracker(session_id, analysis_group.id)
+                    progress_tracker.update_phase_progress('file_creation', 0, {'step': 'Creating files'})
+                
+                # Continue with the rest of the method...
+                self._create_project_files_from_curtain_data(analysis_group, data, diff_file, searched_file, session_id, progress_tracker)
+                
+                # Complete the database storage phase
+                if session_id:
+                    progress_tracker.update_phase_progress('database_storage', 100, {'step': 'Database operations complete'})
+                    progress_tracker.complete_phase('database_storage')
+                
+                # Method completed successfully
+                return True
+                
+        except Exception as e:
+            # Fallback to original method if enhanced processor fails
+            logger.error(f"Enhanced processor failed, falling back to original method: {e}")
+            return self._compose_analysis_group_from_curtain_data_original(analysis_group, session_id)
+    
+    def _create_project_files_from_curtain_data(self, analysis_group, data, diff_file, searched_file, session_id, progress_tracker=None):
+        """Create project files from curtain data (extracted for reuse)"""
+        # Use provided progress tracker or create new one
+        if progress_tracker is None and session_id:
+            progress_tracker = CurtainProgressTracker(session_id, analysis_group.id)
+        
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 10, {'step': 'Preparing file directories'})
+        
+        media_folder = os.path.join(django_settings.MEDIA_ROOT, "user_files")
+        if not os.path.exists(media_folder):
+            os.makedirs(media_folder)
+        
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 20, {'step': 'Processing differential data'})
+            
+        diff_file_path = os.path.join(media_folder, f"{uuid.uuid4().hex}.diff.txt")
+        if data["differentialForm"]["_transformFC"]:
+            diff_file[data["differentialForm"]["_foldChange"]] = np.log2(diff_file[data["differentialForm"]["_foldChange"]])
+        if data["differentialForm"]["_transformSignificant"]:
+            diff_file[data["differentialForm"]["_significant"]] = -np.log10(diff_file[data["differentialForm"]["_significant"]])
+        if data["differentialForm"]["_reverseFoldChange"]:
+            diff_file[data["differentialForm"]["_foldChange"]] = -diff_file[data["differentialForm"]["_foldChange"]]
+        if data["differentialForm"]["_comparison"]:
+            comparison_col = data["differentialForm"]["_comparison"]
+            if comparison_col != "CurtainSetComparison":
+                diff_file[comparison_col] = diff_file[comparison_col].astype(str)
+        
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 40, {'step': 'Writing differential file'})
+            
+        diff_file.to_csv(diff_file_path, sep="\t", index=False)
+        
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 60, {'step': 'Writing searched file'})
+            
+        searched_file_path = os.path.join(media_folder, f"{uuid.uuid4().hex}.searched.txt")
+        searched_file.to_csv(searched_file_path, sep="\t", index=False)
+        
+        # Create file metadata
+        diff_file_extra_data = {
+            "primary_id_col": data["differentialForm"]["_primaryIDs"],
+            "gene_name_col": None,
+            "uniprot_id_col": None,
+            "peptide_seq_col": None,
+            "modification_position_in_peptide_col": None,
+            "modification_position_in_protein_col": None,
+            "localization_prob_col": None,
+        }
+        
+        # Handle PTM data
+        if "_accession" in data["differentialForm"]:
+            diff_file_extra_data["uniprot_id_col"] = data["differentialForm"]["_accession"]
+        if "_position" in data["differentialForm"]:
+            diff_file_extra_data["modification_position_in_protein_col"] = data["differentialForm"]["_position"]
+        if "_positionPeptide" in data["differentialForm"]:
+            diff_file_extra_data["modification_position_in_peptide_col"] = data["differentialForm"]["_positionPeptide"]
+        if "_score" in data["differentialForm"]:
+            diff_file_extra_data["localization_prob_col"] = data["differentialForm"]["_score"]
+        if "_peptideSequence" in data["differentialForm"]:
+            diff_file_extra_data["peptide_seq_col"] = data["differentialForm"]["_peptideSequence"]
+
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 70, {'step': 'Creating project files'})
+            
+        # Create project files
+        diff_project_file = ProjectFile.objects.create(
+            name=f"{analysis_group.name} - Differential Analysis.txt",
+            description="Differential Analysis",
+            file_category="df",
+            file_type="txt",
+            analysis_group=analysis_group,
+            project=analysis_group.project,
+            file=diff_file_path,
+            load_file_content=True,
+            extra_data=json.dumps(diff_file_extra_data)
+        )
+        diff_project_file.save_altered()
+        
+        searched_file_extra_data = {
+            "primary_id_col": data["rawForm"]["_primaryIDs"],
+            "gene_name_col": None,
+            "uniprot_id_col": None,
+        }
+        searched_project_file = ProjectFile.objects.create(
+            name=f"{analysis_group.name} - Searched Data.txt",
+            description="Searched Data",
+            file_category="searched",
+            file_type="txt",
+            analysis_group=analysis_group,
+            project=analysis_group.project,
+            file=searched_file_path,
+            load_file_content=True,
+            extra_data=json.dumps(searched_file_extra_data)
+        )
+        searched_project_file.save_altered()
+        
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 80, {'step': 'Creating sample annotations'})
+            
+        # Create sample annotations
+        self._create_sample_annotations(analysis_group, data, searched_project_file)
+        
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 90, {'step': 'Creating comparison matrix'})
+            
+        # Create comparison matrix
+        self._create_comparison_matrix(analysis_group, data, diff_project_file)
+        
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 95, {'step': 'Finalizing data parsing'})
+            
+        # Continue with existing parsing logic
+        if data["differentialForm"]["_comparisonSelect"]:
+            if data["differentialForm"]["_comparison"] != "CurtainSetComparison":
+                comparison_label = data["differentialForm"]["_comparisonSelect"]
+                if isinstance(comparison_label, str):
+                    comparison_label = [comparison_label]
+                diff_file = diff_file[diff_file[data["differentialForm"]["_comparison"]].isin(comparison_label)]
+        
+        self.parse_curtain_data(data,
+                                diff_file,
+                                data["differentialForm"]["_primaryIDs"],
+                                data["differentialForm"]["_foldChange"],
+                                data["differentialForm"]["_significant"],
+                                data["differentialForm"]["_comparison"]
+                                )
+        
+        if progress_tracker:
+            progress_tracker.update_phase_progress('file_creation', 100, {'step': 'File creation complete'})
+            progress_tracker.complete_phase('file_creation')
+    
+    def _create_sample_annotations(self, analysis_group, data, searched_project_file):
+        """Create sample annotations from curtain data"""
+        annotations = []
+        for s in data["rawForm"]["_samples"]:
+            if "sampleMap" in data["settings"]:
+                if s in data["settings"]["sampleMap"]:
+                    annotations.append({"Sample": s, "Condition": data["settings"]["sampleMap"][s]["condition"]})
+                else:
+                    splitted = s.split(".")
+                    if len(splitted) > 1:
+                        annotations.append({"Sample": s, "Condition": ".".join(splitted[0:len(splitted) - 1]) })
+                    else:
+                        annotations.append({"Sample": s, "Condition": s})
+            else:
+                splitted = s.split(".")
+                if len(splitted) > 1:
+                    annotations.append({"Sample": s, "Condition": ".".join(splitted[0:len(splitted)-1])})
+                else:
+                    annotations.append({"Sample": s, "Condition": s})
+
+        SampleAnnotation.objects.create(
+            name=f"{analysis_group.name} - Sample Annotations",
+            analysis_group=analysis_group,
+            file=searched_project_file,
+            annotations=json.dumps(annotations)
+        )
+    
+    def _create_comparison_matrix(self, analysis_group, data, diff_project_file):
+        """Create comparison matrix from curtain data"""
+        if data["differentialForm"]["_comparison"] == "CurtainSetComparison" or data["differentialForm"]["_comparison"] == "":
+            matrix = [
+                {
+                    "condition_A": "",
+                    "condition_B": "",
+                    "fold_change_col": data["differentialForm"]["_foldChange"],
+                    "p_value_col": data["differentialForm"]["_significant"],
+                    "comparison_col": "",
+                    "comparison_label": "1"
+                }
+            ]
+            comparison_matrix = ComparisonMatrix.objects.create(
+                name=f"{analysis_group.name} - Comparison Matrix",
+                analysis_group=analysis_group,
+                file=diff_project_file,
+                matrix=json.dumps(matrix)
+            )
+
+        else:
+            matrix = []
+            if "_comparisonSelect" in data["differentialForm"]:
+                comparison_labels = data["differentialForm"]["_comparisonSelect"]
+                for label in comparison_labels:
+                    matrix.append(
+                        {
+                            "condition_A": "",
+                            "condition_B": "",
+                            "fold_change_col": data["differentialForm"]["_foldChange"],
+                            "p_value_col": data["differentialForm"]["_significant"],
+                            "comparison_col": data["differentialForm"]["_comparison"],
+                            "comparison_label": label
+                        }
+                    )
+            comparison_matrix = ComparisonMatrix.objects.create(
+                name=f"{analysis_group.name} - Comparison Matrix",
+                analysis_group=analysis_group,
+                file=diff_project_file,
+                matrix=json.dumps(matrix)
+            )
+    
+    def _compose_analysis_group_from_curtain_data_original(self, analysis_group: AnalysisGroup, session_id=None):
+        """Original method preserved as fallback"""
         client = CurtainClient(self.host)
         channel_layer = get_channel_layer()
+        
+        def progress_callback(downloaded_bytes, total_bytes, percentage):
+            if session_id:
+                try:
+                    async_to_sync(channel_layer.group_send)(
+                        f"curtain_{session_id}", {
+                            "type": "curtain_message", "message": {
+                                "type": "curtain_progress",
+                                "status": "downloading",
+                                "id": self.id,
+                                "downloaded_bytes": downloaded_bytes,
+                                "total_bytes": total_bytes,
+                                "percentage": round(percentage, 2),
+                                "message": f"Downloading data from Curtain ({percentage:.1f}%)"
+                            }})
+                except Exception as e:
+                    # Log the error but don't let it interrupt the download
+                    print(f"Failed to send progress update: {e}")
+        
         if session_id:
             async_to_sync(channel_layer.group_send)(
                 f"curtain_{session_id}", {
@@ -976,10 +1360,19 @@ class CurtainData(models.Model):
                         "type": "curtain_status",
                         "status": "in_progress",
                         "id": self.id,
-                        "message": "Downloading data from Curtain"
+                        "message": "Starting download from Curtain"
                     }})
-        data = client.download_curtain_session(self.link_id)
+        data = client.download_curtain_session(self.link_id, progress_callback=progress_callback)
         if session_id:
+            async_to_sync(channel_layer.group_send)(
+                f"curtain_{session_id}", {
+                    "type": "curtain_message", "message": {
+                        "type": "curtain_progress",
+                        "status": "download_complete",
+                        "id": self.id,
+                        "percentage": 100.0,
+                        "message": "Download complete, parsing data from Curtain"
+                    }})
             async_to_sync(channel_layer.group_send)(
                 f"curtain_{session_id}", {
                     "type": "curtain_message", "message": {
@@ -1170,6 +1563,9 @@ class CurtainData(models.Model):
                                 data["differentialForm"]["_significant"],
                                 data["differentialForm"]["_comparison"]
                                 )
+        
+        # Return success to indicate method completion
+        return True
 
 
 class Collate(models.Model):
