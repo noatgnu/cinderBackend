@@ -173,20 +173,20 @@ class ProjectFile(models.Model):
 
     def load_file(self):
         """
-        Method to load the content of the file into the database
+        Load file content into the database using bulk insert for performance.
         """
-        content = self.file_contents.all()
-        if content.exists():
-            content.delete()
+        self.file_contents.all().delete()
         with open(self.file.path, 'rt') as file:
-            content = file.read()
-            content = re.split(r"[\s\n\t]", content)
-            chunk_size = 50000
-            for i in range(0, len(content), chunk_size):
-                if i + chunk_size < len(content):
-                    ProjectFileContent.objects.create(file=self, content=" ".join(content[i:i + chunk_size]))
-                else:
-                    ProjectFileContent.objects.create(file=self, content=" ".join(content[i:]))
+            content = re.split(r"[\s\n\t]", file.read())
+        chunk_size = 50000
+        chunks = [
+            ProjectFileContent(file=self, content=" ".join(content[i:i + chunk_size]))
+            for i in range(0, len(content), chunk_size)
+        ]
+        created = ProjectFileContent.objects.bulk_create(chunks)
+        ProjectFileContent.objects.filter(
+            id__in=[obj.id for obj in created]
+        ).update(search_vector=SearchVector("content"))
 
     def remove_file_content(self):
         self.file_contents.all().delete()
@@ -860,16 +860,19 @@ class CurtainData(models.Model):
 
     def parse_curtain_data(self, data: dict, diff_df: pd.DataFrame, primary_id_col: str, fold_change_col: str, p_value_col: str, comparison_col: str = None, ptm_data: dict = None):
         curtain_data = CurtainUniprotData(data["extraData"]["uniprot"])
-        def parse_data(row: pd.Series, curtain_data: CurtainUniprotData, primary_id_col: str):
-            uniprot = curtain_data.get_uniprot_data_from_pi(row[primary_id_col])
+        gene_name_map = {}
+        entry_map = {}
+        for pid in diff_df[primary_id_col].unique():
+            uniprot = curtain_data.get_uniprot_data_from_pi(pid)
             if isinstance(uniprot, pd.Series):
                 if "Gene Names" in uniprot:
-                    row["Gene Names"] = uniprot["Gene Names"]
+                    gene_name_map[pid] = uniprot["Gene Names"]
                 if "Entry" in uniprot:
-                    row["Entry"] = uniprot["Entry"]
-            return row
-
-        diff_df = diff_df.apply(lambda x: parse_data(x, curtain_data, primary_id_col), axis=1)
+                    entry_map[pid] = uniprot["Entry"]
+        if gene_name_map:
+            diff_df["Gene Names"] = diff_df[primary_id_col].map(gene_name_map)
+        if entry_map:
+            diff_df["Entry"] = diff_df[primary_id_col].map(entry_map)
         self.settings = json.dumps(data["settings"])
         columns = [primary_id_col, fold_change_col, p_value_col]
         if "Gene Names" in diff_df.columns:
