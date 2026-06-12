@@ -38,11 +38,12 @@ logger = logging.getLogger(__name__)
 #     from django.contrib.postgres.search import SearchVectorField, SearchHeadline
 
 def split_terms(input_term):
-    terms = input_term.lower().split("or")
+    terms = re.split(r'\bor\b', input_term.lower())
     term_dict = {}
     for term in terms:
         term = term.strip().replace("'", "").replace('"', "")
-
+        if not term:
+            continue
         subterms = term.split("-")
         if subterms[0] not in term_dict:
             term_dict[subterms[0]] = []
@@ -526,7 +527,7 @@ class SearchSession(models.Model):
                                                     log2_fc = float(line_data[column_headers_map[m["fold_change_col"]]])
                                                 if line_data[column_headers_map[m["p_value_col"]]] != "":
                                                     log10_p = float(line_data[column_headers_map[m["p_value_col"]]])
-                                                if log2_fc and log10_p:
+                                                if log2_fc is not None and log10_p is not None:
                                                     if self.apply_fc_pvalue_filter(log2_fc, log10_p):
                                                         sr = SearchResult(
                                                             search_term="",
@@ -645,18 +646,18 @@ class SearchSession(models.Model):
                         if self.search_mode == "gene":
                             if "gene_name_col" in extra_data:
                                 if gene_name:
-                                    if found_term in gene_name.lower():
+                                    if found_term in [g.strip() for g in gene_name.lower().split(';')]:
                                         yield search_result
 
                         elif self.search_mode == "uniprot":
                             if "uniprot_col" in extra_data:
                                 if uniprot_id:
-                                    if found_term in uniprot_id.lower():
+                                    if found_term in [u.strip() for u in uniprot_id.lower().split(';')]:
                                         yield search_result
                         elif self.search_mode == "pi":
                             if "primary_id_col" in extra_data:
                                 if primary_id:
-                                    if found_term in primary_id.lower():
+                                    if found_term in [p.strip() for p in primary_id.lower().split(';')]:
                                         yield search_result
                         else:
                             yield search_result
@@ -675,7 +676,7 @@ class SearchSession(models.Model):
                         log10_p = None
                         if result["context"][column_headers_map[m["p_value_col"]]] != "":
                             log10_p = float(result["context"][column_headers_map[m["p_value_col"]]])
-                        if log2_fc and log10_p:
+                        if log2_fc is not None and log10_p is not None:
                             if self.apply_fc_pvalue_filter(log2_fc, log10_p):
                                 sr = SearchResult(
                                     search_term=found_term,
@@ -764,7 +765,9 @@ class SearchSession(models.Model):
         for i in data.split("\n"):
             if i == "":
                 break
-            row = i.split(":")
+            row = i.split(":", 2)
+            if len(row) < 3:
+                continue
             yield {"term": row[0].strip(), "row": int(row[1].strip()), "context": row[2]}
 
 
