@@ -100,7 +100,7 @@ class SearchSessionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SearchSession
-        fields = ['id', 'search_term', 'created_at', 'updated_at', 'analysis_groups', 'user', 'session_id']
+        fields = ['id', 'search_term', 'created_at', 'updated_at', 'analysis_groups', 'user', 'session_id', 'failed']
 
 class SpeciesSerializer(serializers.ModelSerializer):
     class Meta:

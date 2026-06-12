@@ -1081,42 +1081,29 @@ class CurtainData(models.Model):
             if not data:
                 raise Exception("Failed to download Curtain data")
             
+            progress_tracker = None
+            if session_id:
+                progress_tracker = CurtainProgressTracker(session_id, analysis_group.id)
+                progress_tracker.update_phase_progress('file_creation', 0, {'step': 'Creating files'})
+
+            try:
+                sniffer = csv.Sniffer()
+                dialect = sniffer.sniff(data["processed"][:1024])
+                diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=dialect.delimiter, quotechar=dialect.quotechar)
+            except Exception:
+                diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
+            try:
+                sniffer = csv.Sniffer()
+                dialect = sniffer.sniff(data["raw"][:1024])
+                searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=dialect.delimiter, quotechar=dialect.quotechar)
+            except Exception:
+                searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
+
             # Use database transaction for atomicity
             with transaction.atomic():
                 # Remove existing files to avoid conflicts
                 analysis_group.project_files.filter(file_category__in=["searched", "df"]).delete()
-                
-                # Continue with existing file processing logic (backward compatible)
-                try:
-                    sniffer = csv.Sniffer()
-                    sample = data["processed"][:1024]
-                    dialect = sniffer.sniff(sample)
-                    diff_file = pd.read_csv(
-                        io.StringIO(data["processed"]),
-                        sep=dialect.delimiter,
-                        quotechar=dialect.quotechar
-                    )
-                except:
-                    diff_file = pd.read_csv(io.StringIO(data["processed"]), sep=None)
-                try:
-                    sniffer = csv.Sniffer()
-                    sample = data["raw"][:1024]
-                    dialect = sniffer.sniff(sample)
-                    searched_file = pd.read_csv(
-                        io.StringIO(data["raw"]),
-                        sep=dialect.delimiter,
-                        quotechar=dialect.quotechar
-                    )
-                except:
-                    searched_file = pd.read_csv(io.StringIO(data["raw"]), sep=None)
-                
-                # Update progress for file creation phase
-                progress_tracker = None
-                if session_id:
-                    progress_tracker = CurtainProgressTracker(session_id, analysis_group.id)
-                    progress_tracker.update_phase_progress('file_creation', 0, {'step': 'Creating files'})
-                
-                # Continue with the rest of the method...
+
                 self._create_project_files_from_curtain_data(analysis_group, data, diff_file, searched_file, session_id, progress_tracker)
                 
                 # Complete the database storage phase

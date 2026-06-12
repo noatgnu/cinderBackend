@@ -116,14 +116,17 @@ class CurtainProgressTracker:
                 self.send_progress_message(standard_message)
     
     def send_progress_message(self, message: Dict):
-        """Send progress message via WebSocket"""
+        """Send progress message via WebSocket with a timeout to avoid blocking the worker."""
         try:
-            async_to_sync(self.channel_layer.group_send)(
-                f"curtain_{self.session_id}", {
-                    "type": "curtain_message",
-                    "message": message
-                }
-            )
+            async def _send():
+                await asyncio.wait_for(
+                    self.channel_layer.group_send(
+                        f"curtain_{self.session_id}",
+                        {"type": "curtain_message", "message": message}
+                    ),
+                    timeout=5.0
+                )
+            async_to_sync(_send)()
         except Exception as e:
             logger.error(f"Failed to send progress message: {e}")
     
