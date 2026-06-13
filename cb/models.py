@@ -38,12 +38,10 @@ logger = logging.getLogger(__name__)
 #     from django.contrib.postgres.search import SearchVectorField, SearchHeadline
 
 def split_terms(input_term):
-    terms = re.split(r'\bor\b', input_term.lower())
+    terms = input_term.lower().split("or")
     term_dict = {}
     for term in terms:
         term = term.strip().replace("'", "").replace('"', "")
-        if not term:
-            continue
         subterms = term.split("-")
         if subterms[0] not in term_dict:
             term_dict[subterms[0]] = []
@@ -646,18 +644,18 @@ class SearchSession(models.Model):
                         if self.search_mode == "gene":
                             if "gene_name_col" in extra_data:
                                 if gene_name:
-                                    if found_term in [g.strip() for g in gene_name.lower().split(';')]:
+                                    if found_term in gene_name.lower():
                                         yield search_result
 
                         elif self.search_mode == "uniprot":
                             if "uniprot_col" in extra_data:
                                 if uniprot_id:
-                                    if found_term in [u.strip() for u in uniprot_id.lower().split(';')]:
+                                    if found_term in uniprot_id.lower():
                                         yield search_result
                         elif self.search_mode == "pi":
                             if "primary_id_col" in extra_data:
                                 if primary_id:
-                                    if found_term in [p.strip() for p in primary_id.lower().split(';')]:
+                                    if found_term in primary_id.lower():
                                         yield search_result
                         else:
                             yield search_result
