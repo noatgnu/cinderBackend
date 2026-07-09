@@ -1,16 +1,15 @@
+import shutil
+import tempfile
+
 from django.contrib.auth.models import User
 from django.contrib.postgres.search import SearchHeadline
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 
 from cb.models import ProjectFile, ProjectFileContent, Project, SearchSession
 
 
-# Create your tests here.
-
 def create_temporary_file():
-    from django.core.files.base import ContentFile
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
     file = SimpleUploadedFile("file.txt", b"This is a test content")
     return file
 
@@ -50,6 +49,49 @@ class TestProjectFileContent(TestCase):
             assert 'test' in result
             assert '<b>test</b> content' in result['test'][0]
             print(result)
+
+    def test_load_file_chunks_by_byte_size(self):
+        """
+        A CSV row with no whitespace becomes a single token under the whitespace
+        split in load_file(). Without byte-size based chunking, a large enough
+        row (or 50,000-token group) produces a tsvector input over Postgres'
+        1,048,575 byte limit and load_file() raises an OperationalError.
+        """
+        media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media_root, ignore_errors=True)
+        media_root_override = override_settings(MEDIA_ROOT=media_root)
+        media_root_override.enable()
+        self.addCleanup(media_root_override.disable)
+
+        row = ",".join(str(i) for i in range(300000))
+        large_content = (row + "\n") * 3
+
+        file = ProjectFile.objects.create(
+            name='Large File',
+            description='Test Description',
+            file_type='csv',
+            file_category='df',
+            load_file_content=True,
+        )
+        file.file.save('large.csv', SimpleUploadedFile('large.csv', large_content.encode('utf-8')))
+        file.load_file()
+
+        contents = list(ProjectFileContent.objects.filter(file=file))
+        assert contents
+
+        seen_values = []
+        for content in contents:
+            assert len(content.content.encode('utf-8')) <= 500_000
+            for value in content.content.replace("\n", " ").split(","):
+                for sub_value in value.split(" "):
+                    if sub_value:
+                        int(sub_value)
+                        seen_values.append(sub_value)
+
+        assert seen_values.count("0") == 3
+        assert seen_values.count("299999") == 3
+
+        file.delete()
 
     def test_project_file_multiple_content(self):
         file = ProjectFile.objects.create(

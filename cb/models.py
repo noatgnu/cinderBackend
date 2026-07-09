@@ -170,18 +170,88 @@ class ProjectFile(models.Model):
 
         return super().save(*args, **kwargs)
 
+    @staticmethod
+    def _split_oversized_token(token: str, max_bytes: int) -> List[str]:
+        """
+        Break a single overlong token (e.g. an unbroken CSV row) into pieces that
+        each fit under max_bytes. Splits on the first delimiter found among
+        comma/semicolon/pipe so pieces stay on value boundaries instead of cutting
+        a word in half; falls back to whole-character boundaries (never a raw
+        byte cut, which could sever a multi-byte UTF-8 character) only when the
+        token has no delimiter to split on.
+        """
+        if len(token.encode('utf-8')) <= max_bytes:
+            return [token]
+
+        for delimiter in (",", ";", "|"):
+            if delimiter in token:
+                pieces = []
+                current_parts = []
+                current_size = 0
+                for part in token.split(delimiter):
+                    part_size = len(part.encode('utf-8')) + 1
+                    if current_parts and current_size + part_size > max_bytes:
+                        pieces.append(delimiter.join(current_parts))
+                        current_parts = []
+                        current_size = 0
+                    if part_size > max_bytes:
+                        pieces.extend(ProjectFile._split_oversized_token(part, max_bytes))
+                        continue
+                    current_parts.append(part)
+                    current_size += part_size
+                if current_parts:
+                    pieces.append(delimiter.join(current_parts))
+                return pieces
+
+        pieces = []
+        current_chars = []
+        current_size = 0
+        for char in token:
+            char_size = len(char.encode('utf-8'))
+            if current_chars and current_size + char_size > max_bytes:
+                pieces.append("".join(current_chars))
+                current_chars = []
+                current_size = 0
+            current_chars.append(char)
+            current_size += char_size
+        if current_chars:
+            pieces.append("".join(current_chars))
+        return pieces
+
     def load_file(self):
         """
         Load file content into the database using bulk insert for performance.
+
+        Content is grouped into chunks by byte size (including the joining space
+        between tokens) rather than token count: Postgres rejects a tsvector built
+        from input over 1,048,575 bytes, and CSV rows with no whitespace (e.g. wide
+        numeric rows) can produce single tokens or 50,000-token groups that blow
+        past that limit regardless of word count. Any single token that alone
+        exceeds the byte limit is broken up via _split_oversized_token.
         """
         self.file_contents.all().delete()
         with open(self.file.path, 'rt') as file:
-            content = re.split(r"[\s\n\t]", file.read())
-        chunk_size = 50000
-        chunks = [
-            ProjectFileContent(file=self, content=" ".join(content[i:i + chunk_size]))
-            for i in range(0, len(content), chunk_size)
-        ]
+            tokens = re.split(r"[\s\n\t]", file.read())
+
+        max_chunk_bytes = 500_000
+        chunks_content = []
+        current_tokens = []
+        current_size = 0
+        for token in tokens:
+            token_size = len(token.encode('utf-8')) + 1
+            if current_tokens and current_size + token_size > max_chunk_bytes:
+                chunks_content.append(" ".join(current_tokens))
+                current_tokens = []
+                current_size = 0
+            if token_size > max_chunk_bytes:
+                chunks_content.extend(self._split_oversized_token(token, max_chunk_bytes))
+                continue
+            current_tokens.append(token)
+            current_size += token_size
+        if current_tokens:
+            chunks_content.append(" ".join(current_tokens))
+
+        chunks = [ProjectFileContent(file=self, content=content) for content in chunks_content]
         created = ProjectFileContent.objects.bulk_create(chunks)
         ProjectFileContent.objects.filter(
             id__in=[obj.id for obj in created]
