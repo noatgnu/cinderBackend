@@ -28,7 +28,8 @@ from sdrf_pipelines.sdrf.sdrf import SdrfDataFrame
 
 from cb.filters import UnimodFilter
 from cb.rq_tasks import start_search_session, load_curtain_data, compose_analysis_group_from_curtain_data, \
-    export_search_data, export_sdrf_task, validate_sdrf_file, process_imported_metadata_file
+    export_search_data, export_sdrf_task, validate_sdrf_file, process_imported_metadata_file, \
+    bind_uploaded_project_file
 from django.conf import settings
 
 from cb.models import Project, AnalysisGroup, ProjectFile, ComparisonMatrix, SampleAnnotation, SearchResult, \
@@ -421,28 +422,17 @@ class ProjectFileViewSet(viewsets.ModelViewSet, FilterMixin):
     @action(detail=False, methods=['post'])
     def bind_uploaded_file(self, request):
         analysis_group_id = request.data['analysis_group']
-        analysis_group = AnalysisGroup.objects.get(id=analysis_group_id)
-
         upload_id = request.data['upload_id']
         file_name = request.data['file_name']
         file_type = request.data['file_type']
         file_category = request.data['file_category']
-        exist_file = analysis_group.project_files.all().filter(file_category=file_category)
-        if exist_file.exists():
-            exist_file.delete()
+        session_id = request.data.get('session_id', '')
 
-        upload = ChunkedUpload.objects.get(id=upload_id)
-        project_file = ProjectFile()
-        project_file.name = file_name
-        project_file.file_type = file_type
-        project_file.file_category = file_category
-        project_file.analysis_group = analysis_group
-        with open(upload.file.path, 'rb') as f:
-            project_file.file.save(upload.filename, f)
-        project_file.load_file_content = True
-        project_file.save_altered()
-        upload.delete()
-        return Response(ProjectFileSerializer(project_file).data, status=status.HTTP_201_CREATED)
+        AnalysisGroup.objects.get(id=analysis_group_id)
+        ChunkedUpload.objects.get(id=upload_id)
+
+        bind_uploaded_project_file.delay(analysis_group_id, upload_id, file_name, file_type, file_category, session_id)
+        return Response(status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=['get'])
     def get_columns(self, request, pk=None):

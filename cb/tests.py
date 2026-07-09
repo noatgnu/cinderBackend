@@ -5,8 +5,10 @@ from django.contrib.auth.models import User
 from django.contrib.postgres.search import SearchHeadline
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from drf_chunked_upload.models import ChunkedUpload
 
 from cb.models import ProjectFile, ProjectFileContent, Project, SearchSession
+from cb.rq_tasks import bind_uploaded_project_file
 
 
 def create_temporary_file():
@@ -116,6 +118,53 @@ class TestProjectFileContent(TestCase):
         assert results.exists()
         for i in results:
             print(i.headline)
+
+
+class TestBindUploadedProjectFile(TestCase):
+    def test_bind_uploaded_project_file_loads_content_and_cleans_up_upload(self):
+        """
+        bind_uploaded_project_file is the worker-side counterpart of
+        ProjectFileViewSet.bind_uploaded_file: the view only enqueues it so a
+        large file's hashing/content-loading doesn't run inside the request and
+        risk a gateway timeout. An empty session_id skips the websocket
+        broadcast, letting this be verified without a channel layer.
+        """
+        media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media_root, ignore_errors=True)
+        media_root_override = override_settings(MEDIA_ROOT=media_root)
+        media_root_override.enable()
+        self.addCleanup(media_root_override.disable)
+
+        user = User.objects.create_user(username='uploader', password='test')
+        project = Project.objects.create(
+            name='Test Project',
+            description='Test Description',
+            hash='test',
+            metadata='test',
+            global_id='test',
+            temporary=False,
+            encrypted=False,
+            user=user
+        )
+        analysis_group = project.analysis_groups.create(
+            name='Test Analysis Group',
+            description='Test Description',
+        )
+
+        upload = ChunkedUpload.objects.create(user=user, filename='data.csv')
+        upload.file.save('data.csv', SimpleUploadedFile('data.csv', b'a,b,c\n1,2,3\n'))
+        upload_id = str(upload.id)
+
+        project_file_id = bind_uploaded_project_file(analysis_group.id, upload_id, 'data.csv', 'csv', 'df', '')
+
+        project_file = ProjectFile.objects.get(id=project_file_id)
+        assert project_file.file_category == 'df'
+        assert project_file.analysis_group_id == analysis_group.id
+        assert project_file.hash != ''
+        assert ProjectFileContent.objects.filter(file=project_file).exists()
+        assert not ChunkedUpload.objects.filter(id=upload_id).exists()
+
+        project_file.delete()
 
 
 class TestProject(TestCase):

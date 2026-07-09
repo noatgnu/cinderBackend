@@ -20,7 +20,8 @@ import re
 from sdrf_pipelines.sdrf.sdrf import SdrfDataFrame
 
 from cb.models import SearchSession, AnalysisGroup, CurtainData, Abs, SearchResult, SourceFile, MetadataColumn, Species, \
-    MSUniqueVocabularies, Unimod
+    MSUniqueVocabularies, Unimod, ProjectFile
+from cb.serializers import ProjectFileSerializer
 
 
 @job('default', timeout='3h')
@@ -215,6 +216,55 @@ def export_sdrf_task(analysis_group_id: int, uuid_str: str, session_id: str):
                 "job_id": uuid_str
             }})
     return tempt_path
+
+
+@job('default', timeout='3h')
+def bind_uploaded_project_file(analysis_group_id: int, upload_id: str, file_name: str, file_type: str, file_category: str, session_id: str):
+    """
+    Move a completed chunked upload into a ProjectFile and load its content for
+    full-text search. Runs in the worker since hashing and content-chunking a
+    large mass-spec output file can take long enough to exceed the request
+    timeout when done synchronously in the view.
+    """
+    channel_layer = get_channel_layer()
+    group_name = f"curtain_{session_id}"
+
+    def send_status(status, **extra):
+        if not session_id:
+            return
+        async_to_sync(channel_layer.group_send)(
+            group_name, {
+                "type": "curtain_message", "message": {
+                    "type": "file_bind_status",
+                    "status": status,
+                    "analysis_group_id": analysis_group_id,
+                    "file_category": file_category,
+                    "file_name": file_name,
+                    **extra
+                }})
+
+    send_status("started")
+    try:
+        analysis_group = AnalysisGroup.objects.get(id=analysis_group_id)
+        analysis_group.project_files.filter(file_category=file_category).delete()
+
+        upload = ChunkedUpload.objects.get(id=upload_id)
+        project_file = ProjectFile()
+        project_file.name = file_name
+        project_file.file_type = file_type
+        project_file.file_category = file_category
+        project_file.analysis_group = analysis_group
+        with open(upload.file.path, 'rb') as f:
+            project_file.file.save(upload.filename, f)
+        project_file.load_file_content = True
+        project_file.save_altered()
+        upload.delete()
+    except Exception as e:
+        send_status("error", message=str(e))
+        raise
+
+    send_status("complete", file=ProjectFileSerializer(project_file).data)
+    return project_file.id
 
 
 def create_sdrf_array_from_metadata(analysis_group_id):
